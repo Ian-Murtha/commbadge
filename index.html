@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1117">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CommBadge">
+  <meta name="description" content="IPM's CommBadge — two-way video call">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>IPM's CommBadge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f1117; --surface: #181b24; --surface2: #1f2330;
+      --border: rgba(255,255,255,0.08); --border2: rgba(255,255,255,0.14);
+      --text: #f0f0f0; --muted: #7a7f8e;
+      --accent: #a8f0c6; --accent-dim: rgba(168,240,198,0.12); --accent-border: rgba(168,240,198,0.3);
+      --danger: #f0a8a8; --danger-dim: rgba(240,168,168,0.12); --danger-border: rgba(240,168,168,0.3);
+      --warn: #f0d8a8; --warn-dim: rgba(240,216,168,0.12); --warn-border: rgba(240,216,168,0.3);
+      --blue: #a8d8f0; --blue-dim: rgba(168,216,240,0.12); --blue-border: rgba(168,216,240,0.3);
+      --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+      --r: 12px; --r-sm: 8px;
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    body { display: flex; flex-direction: column; min-height: 100dvh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+
+    main { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.875rem; max-width: 480px; margin: 0 auto; width: 100%; }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 1.25rem; }
+    .section-label { font-size: 11px; font-family: var(--mono); color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.6rem; }
+
+    /* Status bar */
+    .status-bar { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 0.6rem 1rem; font-family: var(--mono); font-size: 12px; color: var(--muted); flex-shrink: 0; }
+    .stream-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background 0.3s; }
+    .stream-dot.live { background: var(--danger); box-shadow: 0 0 6px rgba(240,100,100,0.6); animation: pulse 1.5s infinite; }
+    .stream-dot.watching { background: var(--accent); }
+    .stream-dot.connecting { background: var(--warn); }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
+    #stream-quality { margin-left: auto; font-size: 10px; font-family: var(--mono); color: var(--muted); }
+
+    /* Inputs */
+    input[type="text"], input[type="range"] { width: 100%; }
+    input[type="text"] { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text); font-family: var(--sans); font-size: 15px; padding: 10px 12px; outline: none; transition: border-color 0.15s; -webkit-appearance: none; }
+    input[type="text"]:focus { border-color: var(--border2); }
+    input[type="text"]::placeholder { color: var(--muted); }
+    input[type="range"] { -webkit-appearance: none; appearance: none; height: 4px; background: var(--surface2); border-radius: 999px; outline: none; border: 1px solid var(--border); cursor: pointer; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); cursor: pointer; }
+    input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); cursor: pointer; }
+
+    /* Camera selector */
+    .cam-row { display: flex; gap: 6px; margin-bottom: 1rem; }
+    .cam-btn { flex: 1; padding: 9px; border: 1px solid var(--border); border-radius: var(--r-sm); background: transparent; color: var(--muted); font-family: var(--mono); font-size: 11px; cursor: pointer; transition: all 0.15s; text-align: center; }
+    .cam-btn.active { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+
+    /* Quality sliders */
+    .quality-row { display: flex; align-items: center; gap: 10px; margin-bottom: 0.6rem; }
+    .quality-label { font-family: var(--mono); font-size: 11px; color: var(--muted); width: 68px; flex-shrink: 0; text-align: right; letter-spacing: 0.05em; text-transform: uppercase; }
+    .quality-val { font-family: var(--mono); font-size: 11px; color: var(--accent); width: 72px; flex-shrink: 0; }
+
+    /* Call buttons */
+    .call-btn { width: 100%; padding: 14px; border-radius: var(--r-sm); font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: background 0.15s, transform 0.1s; border: 1px solid; margin-bottom: 0.5rem; }
+    .call-btn:last-child { margin-bottom: 0; }
+    .call-btn:active { transform: scale(0.99); }
+    .call-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .call-btn.start  { background: var(--accent-dim); border-color: var(--accent-border); color: var(--accent); }
+    .call-btn.start:hover:not(:disabled)  { background: rgba(168,240,198,0.2); }
+    .call-btn.join   { background: var(--blue-dim); border-color: var(--blue-border); color: var(--blue); }
+    .call-btn.join:hover:not(:disabled)   { background: rgba(168,216,240,0.2); }
+    .call-btn.end    { background: var(--danger-dim); border-color: var(--danger-border); color: var(--danger); }
+    .call-btn.end:hover:not(:disabled)    { background: rgba(240,100,100,0.22); }
+    .call-btn.ctrl   { background: var(--surface2); border-color: var(--border2); color: var(--muted); }
+    .call-btn.ctrl:hover:not(:disabled)   { color: var(--text); }
+
+    /* Video */
+    .call-video-wrap { position: relative; background: #000; border-radius: var(--r-sm); overflow: hidden; aspect-ratio: 16/9; }
+    .call-video-wrap video#remote-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .call-video-wrap video#local-video  { position: absolute; bottom: 10px; right: 10px; width: 28%; aspect-ratio: 16/9; object-fit: cover; border-radius: 6px; border: 2px solid rgba(255,255,255,0.2); background: #111; z-index: 2; }
+    .call-video-wrap .no-stream { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: center; padding: 1rem; }
+
+    /* Controls row */
+    .ctrl-row { display: flex; gap: 8px; }
+    .ctrl-row .call-btn { flex: 1; padding: 11px; margin-bottom: 0; }
+
+    /* Chat */
+    .chat-messages { min-height: 100px; max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-bottom: 0.5rem; }
+    .chat-msg { max-width: 80%; padding: 7px 11px; border-radius: 12px; font-size: 13px; line-height: 1.4; word-break: break-word; }
+    .chat-msg.sent     { align-self: flex-end; background: var(--accent-dim); border: 1px solid var(--accent-border); color: var(--text); border-bottom-right-radius: 3px; }
+    .chat-msg.received { align-self: flex-start; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 3px; }
+    .chat-msg .msg-time { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 3px; }
+    .chat-empty { font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: center; padding: 1rem 0; }
+    .chat-input-row { display: flex; gap: 8px; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+    .chat-input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text); font-family: var(--sans); font-size: 14px; padding: 9px 12px; outline: none; }
+    .chat-input:focus { border-color: var(--border2); }
+    .chat-input::placeholder { color: var(--muted); }
+    .chat-send { background: var(--accent-dim); border: 1px solid var(--accent-border); border-radius: var(--r-sm); color: var(--accent); font-family: var(--mono); font-size: 12px; padding: 9px 14px; cursor: pointer; white-space: nowrap; }
+    .chat-send:hover { background: rgba(168,240,198,0.22); }
+    .chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Busy */
+    .busy-card { text-align: center; padding: 2.5rem 1rem; }
+    .busy-icon { font-size: 40px; margin-bottom: 0.75rem; }
+    .busy-text { font-family: var(--mono); font-size: 13px; color: var(--muted); line-height: 1.8; }
+
+    /* Toast */
+    .toast { position: fixed; bottom: calc(1.5rem + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%) translateY(10px); background: var(--surface2); border: 1px solid var(--border2); border-radius: 999px; padding: 9px 20px; font-family: var(--mono); font-size: 12px; color: var(--text); opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; white-space: nowrap; z-index: 400; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+<main>
+
+  <!-- Status bar -->
+  <div class="status-bar">
+    <span class="stream-dot" id="stream-dot"></span>
+    <span id="stream-status-text">Ready</span>
+    <span id="stream-quality"></span>
+  </div>
+
+  <!-- Idle screen -->
+  <div class="card" id="card-idle">
+    <p class="section-label" style="margin-bottom:0.75rem">Camera</p>
+    <div class="cam-row">
+      <button class="cam-btn active" id="cam-rear"  onclick="selectCamera('rear')">📷 Rear</button>
+      <button class="cam-btn"        id="cam-front" onclick="selectCamera('front')">🤳 Front</button>
+    </div>
+    <p class="section-label" style="margin-bottom:0.6rem">Stream quality</p>
+    <div class="quality-row">
+      <span class="quality-label">Resolution</span>
+      <input type="range" id="sl-res" min="0" max="3" step="1" value="1" oninput="updateSliders()">
+      <span class="quality-val" id="lbl-res">480×360</span>
+    </div>
+    <div class="quality-row">
+      <span class="quality-label">Frame rate</span>
+      <input type="range" id="sl-fps" min="0" max="4" step="1" value="1" oninput="updateSliders()">
+      <span class="quality-val" id="lbl-fps">15 fps</span>
+    </div>
+    <div class="quality-row" style="margin-bottom:1.25rem">
+      <span class="quality-label">Bitrate</span>
+      <input type="range" id="sl-bps" min="0" max="4" step="1" value="2" oninput="updateSliders()">
+      <span class="quality-val" id="lbl-bps">400 kbps</span>
+    </div>
+    <button class="call-btn start" id="btn-start" onclick="startCall()">⬤ Start Call</button>
+  </div>
+
+  <!-- Busy screen -->
+  <div class="card" id="card-busy" style="display:none">
+    <div class="busy-card">
+      <div class="busy-icon">📵</div>
+      <div class="busy-text">A call is already in progress.<br>Please try again later.</div>
+    </div>
+  </div>
+
+  <!-- Active call: video -->
+  <div class="card" style="padding:0;overflow:hidden;display:none" id="card-video">
+    <div class="call-video-wrap">
+      <video id="remote-video" autoplay playsinline></video>
+      <video id="local-video"  autoplay muted playsinline></video>
+      <div class="no-stream" id="no-stream-msg">Waiting for other user…</div>
+    </div>
+  </div>
+
+  <!-- Active call: controls + chat -->
+  <div class="card" style="display:none" id="card-controls">
+    <div class="ctrl-row" style="margin-bottom:0.75rem">
+      <button class="call-btn ctrl" id="btn-mute" onclick="toggleMute()">🔊 Mute</button>
+      <button class="call-btn ctrl" id="btn-cam"  onclick="toggleCamera()">📷 Hide Cam</button>
+      <button class="call-btn end"               onclick="stopStream()">■ End Call</button>
+    </div>
+    <p class="section-label">Chat</p>
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-empty" id="chat-empty">No messages yet</div>
+    </div>
+    <div class="chat-input-row">
+      <input type="text" class="chat-input" id="chat-input" placeholder="Type a message…" onkeydown="chatKeydown(event)" maxlength="500">
+      <button class="chat-send" id="chat-send" onclick="sendChatMessage()" disabled>Send</button>
+    </div>
+  </div>
+
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────
+// ROADMAP: Move signalling credentials to a separate dedicated Supabase
+// project to keep primary database more private, while preserving the
+// seamless one-button connection experience.
+const SB_URL    = 'https://bwazurshtrpqzatmkdkj.supabase.co';
+const SB_KEY    = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ3YXp1cnNodHJwcXphdG1rZGtqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MjMwMTMsImV4cCI6MjA5NTQ5OTAxM30.GLp4TEQ8geyczhNXzH8ZX3QcnAq32GntTgitXWcagdY';
+const STREAM_CH = 'commbadge-stream'; // Separate channel from main app
+
+const RTC_CONFIG = { iceServers: [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'turn:openrelay.metered.ca:80',   username:'openrelayproject', credential:'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443',  username:'openrelayproject', credential:'openrelayproject' },
+  { urls: 'turns:openrelay.metered.ca:443', username:'openrelayproject', credential:'openrelayproject' },
+]};
+
+// ── Quality options ───────────────────────────────────────────
+const RES_OPTIONS = [
+  { label:'320×240',  w:320,  h:240  },
+  { label:'480×360',  w:480,  h:360  },
+  { label:'640×480',  w:640,  h:480  },
+  { label:'1280×720', w:1280, h:720  },
+];
+const FPS_OPTIONS = [8, 15, 24, 30, 60];
+const BPS_OPTIONS = [
+  { label:'100 kbps', bps:100000  },
+  { label:'200 kbps', bps:200000  },
+  { label:'400 kbps', bps:400000  },
+  { label:'800 kbps', bps:800000  },
+  { label:'1.5 Mbps', bps:1500000 },
+];
+
+function getQualitySettings() {
+  const ri = parseInt(localStorage.getItem('cb_sl_res') ?? '1');
+  const fi = parseInt(localStorage.getItem('cb_sl_fps') ?? '1');
+  const bi = parseInt(localStorage.getItem('cb_sl_bps') ?? '2');
+  return { res:RES_OPTIONS[Math.min(ri,3)], fps:FPS_OPTIONS[Math.min(fi,4)], bps:BPS_OPTIONS[Math.min(bi,4)] };
+}
+
+function updateSliders() {
+  const ri=parseInt(getEl('sl-res').value), fi=parseInt(getEl('sl-fps').value), bi=parseInt(getEl('sl-bps').value);
+  getEl('lbl-res').textContent = RES_OPTIONS[ri].label;
+  getEl('lbl-fps').textContent = FPS_OPTIONS[fi]+' fps';
+  getEl('lbl-bps').textContent = BPS_OPTIONS[bi].label;
+  localStorage.setItem('cb_sl_res',ri); localStorage.setItem('cb_sl_fps',fi); localStorage.setItem('cb_sl_bps',bi);
+}
+
+function initSliders() {
+  const ri=parseInt(localStorage.getItem('cb_sl_res')??'1'), fi=parseInt(localStorage.getItem('cb_sl_fps')??'1'), bi=parseInt(localStorage.getItem('cb_sl_bps')??'2');
+  getEl('sl-res').value=ri; getEl('sl-fps').value=fi; getEl('sl-bps').value=bi;
+  updateSliders();
+}
+
+// ── State ─────────────────────────────────────────────────────
+let supabaseClient = null, rtcChannel = null, peerConnection = null, localStream = null;
+let inCall = false, isInitiator = false, isMuted = false, isCamHidden = false;
+let dataChannel = null, pendingCandidates = [], remoteDescSet = false, negotiating = false;
+let adaptiveTimer = null, keyframeTimer = null, lastPacketsLost = 0, lastPacketsSent = 0, currentMaxBitrate = 200000;
+let reconnectTimer = null, reconnectAttempts = 0;
+let selectedCamera = 'rear';
+
+// ── Helpers ───────────────────────────────────────────────────
+const getEl = id => document.getElementById(id);
+const pad   = n  => String(n).padStart(2,'0');
+
+function nowTs() {
+  const d=new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+function fmt12time(tsStr) {
+  const [hh,mm]=tsStr.split(' ')[1].split(':'); const h=parseInt(hh);
+  return `${h%12||12}:${mm}${h>=12?'pm':'am'}`;
+}
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function vibrate()  { if(navigator.vibrate) navigator.vibrate(40); }
+
+function showToast(msg) {
+  const t=getEl('toast'); t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2200);
+}
+function setStreamStatus(state, msg) {
+  const dot=getEl('stream-dot');
+  dot.className='stream-dot'+(state==='live'?' live':state==='watching'?' watching':state==='connecting'?' connecting':'');
+  getEl('stream-status-text').textContent=msg;
+}
+
+// ── Camera ────────────────────────────────────────────────────
+function selectCamera(facing) {
+  selectedCamera=facing;
+  getEl('cam-rear').classList.toggle('active',facing==='rear');
+  getEl('cam-front').classList.toggle('active',facing==='front');
+}
+
+async function getLocalStream() {
+  const {res,fps}=getQualitySettings();
+  return await navigator.mediaDevices.getUserMedia({
+    video:{ facingMode:selectedCamera==='rear'?'environment':'user', width:{ideal:res.w,max:res.w}, height:{ideal:res.h,max:res.h}, frameRate:{ideal:fps,max:fps} },
+    audio:{ echoCancellation:true, noiseSuppression:true, sampleRate:16000 }
+  });
+}
+
+// ── Supabase session ──────────────────────────────────────────
+function initSB() {
+  if (!supabaseClient) supabaseClient=window.supabase.createClient(SB_URL,SB_KEY);
+}
+
+async function sbFetch(path, opts={}) {
+  const res=await fetch(SB_URL+'/rest/v1/'+path,{
+    ...opts, headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':opts.prefer||'',...(opts.headers||{})}
+  });
+  if(!res.ok) throw new Error(await res.text());
+  const text=await res.text(); return text?JSON.parse(text):null;
+}
+
+async function setSessionActive(active) {
+  try {
+    const rows=await sbFetch('stream_session?order=id.asc&limit=1');
+    if(rows&&rows.length) await sbFetch(`stream_session?id=eq.${rows[0].id}`,{method:'PATCH',prefer:'return=minimal',body:JSON.stringify({active,updated_at:new Date().toISOString()})});
+  } catch(err){}
+}
+
+async function checkSessionActive() {
+  try {
+    const rows=await sbFetch('stream_session?order=id.asc&limit=1');
+    return rows&&rows.length&&rows[0].active===true;
+  } catch(err){return false;}
+}
+
+// ── SDP helpers ───────────────────────────────────────────────
+function constrainSDP(sdp) {
+  const lines=sdp.split('\r\n'); let vp8=null;
+  for(const l of lines){const m=l.match(/a=rtpmap:(\d+) VP8\/90000/);if(m){vp8=m[1];break;}}
+  let result=sdp;
+  if(vp8){ result=result.replace(/m=video (\d+) [A-Z/]+ ([\d ]+)/,(match,port,pays)=>`m=video ${port} UDP/TLS/RTP/SAVPF ${vp8} ${pays.split(' ').filter(p=>p!==vp8).join(' ')}`); }
+  const kbps=Math.round(getQualitySettings().bps.bps/1000);
+  result=result.replace(/(m=video [^\r\n]+\r\n)/g,`$1b=AS:${kbps}\r\n`);
+  return result;
+}
+
+// ── Bitrate / adaptive ────────────────────────────────────────
+async function applyBitrateLimit(pc) {
+  const {bps,fps}=getQualitySettings(); currentMaxBitrate=bps.bps;
+  for(const sender of pc.getSenders()){
+    if(!sender.track) continue;
+    try{
+      const params=sender.getParameters();
+      if(!params.encodings?.length) params.encodings=[{}];
+      if(sender.track.kind==='video'){params.encodings[0].maxBitrate=bps.bps;params.encodings[0].maxFramerate=fps;}
+      await sender.setParameters(params);
+    }catch(e){}
+  }
+  startAdaptiveBitrate(pc); startKeyframeInterval(pc);
+}
+
+function startAdaptiveBitrate(pc) {
+  if(adaptiveTimer) clearInterval(adaptiveTimer);
+  adaptiveTimer=setInterval(async()=>{
+    if(!pc||pc.connectionState!=='connected') return;
+    try{
+      const stats=await pc.getStats(); let lost=0,sent=0,rtt=0;
+      stats.forEach(r=>{
+        if(r.type==='outbound-rtp'&&r.kind==='video') sent=r.packetsSent||0;
+        if(r.type==='remote-inbound-rtp'&&r.kind==='video'){lost=r.packetsLost||0;rtt=r.roundTripTime||0;}
+      });
+      const ld=lost-lastPacketsLost,sd=sent-lastPacketsSent;
+      lastPacketsLost=lost;lastPacketsSent=sent;
+      const lossRate=sd>0?ld/sd:0;
+      let nb=currentMaxBitrate;
+      if(lossRate>0.05||rtt>0.3){nb=Math.max(50000,Math.floor(currentMaxBitrate*0.75));updateQualityIndicator('poor');}
+      else if(lossRate<0.01&&rtt<0.15){const ceil=getQualitySettings().bps.bps;nb=Math.min(ceil,Math.floor(currentMaxBitrate*1.1));updateQualityIndicator('good');}
+      else updateQualityIndicator(lossRate<0.03?'good':'fair');
+      if(nb!==currentMaxBitrate){
+        currentMaxBitrate=nb;
+        for(const sender of pc.getSenders()){
+          if(!sender.track||sender.track.kind!=='video') continue;
+          try{const p=sender.getParameters();if(!p.encodings?.length)p.encodings=[{}];p.encodings[0].maxBitrate=nb;await sender.setParameters(p);}catch(e){}
+        }
+      }
+    }catch(err){}
+  },3000);
+}
+
+function stopAdaptiveBitrate() {
+  if(adaptiveTimer){clearInterval(adaptiveTimer);adaptiveTimer=null;}
+  if(keyframeTimer){clearInterval(keyframeTimer);keyframeTimer=null;}
+  currentMaxBitrate=200000;lastPacketsLost=0;lastPacketsSent=0;
+}
+
+function startKeyframeInterval(pc) {
+  if(keyframeTimer) clearInterval(keyframeTimer);
+  keyframeTimer=setInterval(async()=>{
+    if(!pc||pc.connectionState!=='connected') return;
+    for(const sender of pc.getSenders()){
+      if(sender.track?.kind==='video'&&sender.generateKeyFrame){try{await sender.generateKeyFrame();}catch(e){}}
+    }
+  },2000);
+}
+
+function updateQualityIndicator(level) {
+  const el=getEl('stream-quality');if(!el) return;
+  const map={good:{text:'Good',color:'var(--accent)'},fair:{text:'Fair',color:'var(--warn)'},poor:{text:'Poor',color:'var(--danger)'}};
+  const q=map[level]||map.good;el.textContent=q.text;el.style.color=q.color;
+}
+
+// ── Signalling channel ────────────────────────────────────────
+function setupChannel() {
+  initSB();
+  if(rtcChannel){rtcChannel.unsubscribe();rtcChannel=null;}
+  rtcChannel=supabaseClient.channel(STREAM_CH,{config:{broadcast:{self:false}}});
+
+  rtcChannel.on('broadcast',{event:'answer'},async({payload})=>{
+    if(!inCall||!isInitiator||!peerConnection) return;
+    try{
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+      remoteDescSet=true;
+      for(const c of pendingCandidates){try{await peerConnection.addIceCandidate(new RTCIceCandidate(c));}catch(e){}}
+      pendingCandidates=[];
+    }catch(err){}
+  });
+
+  rtcChannel.on('broadcast',{event:'offer'},async({payload})=>{
+    if(!inCall||isInitiator||negotiating) return;
+    negotiating=true;remoteDescSet=false;pendingCandidates=[];
+    setStreamStatus('connecting','Connecting…');
+    if(peerConnection){peerConnection.close();peerConnection=null;}
+    await createPC(false);
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+    remoteDescSet=true;
+    for(const c of pendingCandidates){try{await peerConnection.addIceCandidate(new RTCIceCandidate(c));}catch(e){}}
+    pendingCandidates=[];
+    const answer=await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    rtcChannel.send({type:'broadcast',event:'answer',payload:{sdp:answer}});
+  });
+
+  rtcChannel.on('broadcast',{event:'ice-candidate'},async({payload})=>{
+    if(!peerConnection) return;
+    if(!remoteDescSet) pendingCandidates.push(payload.candidate);
+    else{try{await peerConnection.addIceCandidate(new RTCIceCandidate(payload.candidate));}catch(e){}}
+  });
+
+  rtcChannel.on('broadcast',{event:'call-ended'},()=>{
+    if(inCall){cleanup();setStreamStatus('','Call ended');showToast('Call ended');}
+  });
+
+  rtcChannel.on('broadcast',{event:'responder-ready'},async()=>{
+    if(!inCall||!isInitiator||!peerConnection) return;
+    await sendOffer(); setStreamStatus('connecting','Connecting…');
+  });
+
+  return new Promise(resolve=>{rtcChannel.subscribe(status=>{if(status==='SUBSCRIBED')resolve();});});
+}
+
+async function createPC(initiator) {
+  peerConnection=new RTCPeerConnection(RTC_CONFIG);
+  window._debugPC=peerConnection;
+
+  peerConnection.onicecandidate=({candidate})=>{
+    if(candidate&&rtcChannel) rtcChannel.send({type:'broadcast',event:'ice-candidate',payload:{candidate}});
+  };
+
+  peerConnection.onconnectionstatechange=()=>{
+    const state=peerConnection?.connectionState;
+    if(state==='connected'){
+      negotiating=false;
+      setStreamStatus('live','In call');
+      applyBitrateLimit(peerConnection);
+      getEl('no-stream-msg').style.display='none';
+      vibrate();
+    } else if(state==='disconnected'){
+      setStreamStatus('connecting','Reconnecting…');
+      tryIceRestart(peerConnection);
+    } else if(state==='failed'){
+      autoReconnect();
+    }
+  };
+
+  peerConnection.ontrack=({streams})=>{
+    const rv=getEl('remote-video');rv.srcObject=streams[0];rv.play().catch(()=>{});
+    getEl('no-stream-msg').style.display='none';
+  };
+
+  if(localStream) localStream.getTracks().forEach(track=>peerConnection.addTrack(track,localStream));
+
+  if(initiator){
+    dataChannel=peerConnection.createDataChannel('chat',{ordered:true});
+    setupDataChannel(dataChannel);
+  } else {
+    peerConnection.ondatachannel=({channel})=>{dataChannel=channel;setupDataChannel(dataChannel);};
+  }
+}
+
+async function sendOffer() {
+  if(!peerConnection||!inCall) return;
+  remoteDescSet=false;pendingCandidates=[];
+  const offer=await peerConnection.createOffer();
+  const constrained={type:offer.type,sdp:constrainSDP(offer.sdp)};
+  await peerConnection.setLocalDescription(constrained);
+  rtcChannel.send({type:'broadcast',event:'offer',payload:{sdp:constrained}});
+}
+
+// ── ICE restart / reconnect ───────────────────────────────────
+async function tryIceRestart(pc) {
+  if(!pc||!rtcChannel) return;
+  try{
+    const offer=await pc.createOffer({iceRestart:true});
+    const constrained={type:offer.type,sdp:constrainSDP(offer.sdp)};
+    await pc.setLocalDescription(constrained);
+    rtcChannel.send({type:'broadcast',event:'offer',payload:{sdp:constrained}});
+  }catch(err){autoReconnect();}
+}
+
+function autoReconnect() {
+  if(!inCall||reconnectAttempts>=5){cleanup();setStreamStatus('','Could not reconnect');reconnectAttempts=0;return;}
+  reconnectAttempts++;
+  const delay=Math.min(2000*reconnectAttempts,10000);
+  setStreamStatus('connecting',`Reconnecting… (${reconnectAttempts}/5)`);
+  reconnectTimer=setTimeout(async()=>{
+    if(!inCall) return;
+    if(peerConnection){peerConnection.close();peerConnection=null;}
+    remoteDescSet=false;pendingCandidates=[];negotiating=false;
+    await createPC(isInitiator);
+    if(isInitiator) await sendOffer();
+    else if(rtcChannel) rtcChannel.send({type:'broadcast',event:'responder-ready',payload:{}});
+  },delay);
+}
+
+// ── Data channel / chat ───────────────────────────────────────
+function setupDataChannel(dc) {
+  dc.onopen=()=>{getEl('chat-send').disabled=false;getEl('chat-input').placeholder='Type a message…';};
+  dc.onclose=()=>{getEl('chat-send').disabled=true;};
+  dc.onmessage=({data})=>{try{const msg=JSON.parse(data);appendChat(msg.text,false,msg.time);}catch(e){}};
+}
+
+function appendChat(text,sent,time) {
+  const container=getEl('chat-messages');
+  const empty=getEl('chat-empty');if(empty)empty.remove();
+  const div=document.createElement('div');
+  div.className='chat-msg '+(sent?'sent':'received');
+  div.innerHTML=`${escHtml(text)}<div class="msg-time">${time}</div>`;
+  container.appendChild(div);
+  container.scrollTop=container.scrollHeight;
+}
+
+function sendChatMessage() {
+  const input=getEl('chat-input');
+  const text=input.value.trim();if(!text||!dataChannel||dataChannel.readyState!=='open') return;
+  const time=fmt12time(nowTs());
+  dataChannel.send(JSON.stringify({text,time}));
+  appendChat(text,true,time);
+  input.value='';
+}
+
+function chatKeydown(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChatMessage();}}
+
+// ── Call flow ─────────────────────────────────────────────────
+async function startCall() {
+  const busy=await checkSessionActive();
+  if(busy){showBusy();return;}
+  try{localStream=await getLocalStream();}
+  catch(err){showToast('Camera/mic access denied');return;}
+  inCall=true;isInitiator=true;isMuted=false;isCamHidden=false;
+  remoteDescSet=false;pendingCandidates=[];negotiating=false;
+  const lv=getEl('local-video');lv.srcObject=localStream;lv.play().catch(()=>{});
+  showCallUI();setStreamStatus('connecting','Waiting for other user…');
+  await setSessionActive(true);
+  await setupChannel();
+  await createPC(true);
+}
+
+async function joinCall() {
+  try{localStream=await getLocalStream();}
+  catch(err){showToast('Camera/mic access denied');return;}
+  inCall=true;isInitiator=false;isMuted=false;isCamHidden=false;
+  remoteDescSet=false;pendingCandidates=[];negotiating=false;
+  const lv=getEl('local-video');lv.srcObject=localStream;lv.play().catch(()=>{});
+  showCallUI();setStreamStatus('connecting','Joining call…');
+  await setupChannel();
+  await createPC(false);
+  rtcChannel.send({type:'broadcast',event:'responder-ready',payload:{}});
+}
+
+function stopStream() {
+  if(inCall&&rtcChannel) rtcChannel.send({type:'broadcast',event:'call-ended',payload:{}});
+  if(inCall) setSessionActive(false);
+  cleanup();setStreamStatus('','Call ended');
+}
+
+function cleanup() {
+  inCall=false;isInitiator=false;negotiating=false;
+  remoteDescSet=false;pendingCandidates=[];
+  stopAdaptiveBitrate();
+  if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null;}
+  reconnectAttempts=0;
+  if(dataChannel){dataChannel.close();dataChannel=null;}
+  if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null;}
+  if(peerConnection){peerConnection.close();peerConnection=null;}
+  if(rtcChannel){rtcChannel.unsubscribe();rtcChannel=null;}
+  isMuted=false;isCamHidden=false;
+  const lv=getEl('local-video'),rv=getEl('remote-video');
+  lv.srcObject=null;lv.style.opacity='1';rv.srcObject=null;
+  getEl('no-stream-msg').style.display='flex';
+  getEl('no-stream-msg').textContent='Waiting for other user…';
+  const chatCont=getEl('chat-messages');
+  if(chatCont) chatCont.innerHTML='<div class="chat-empty" id="chat-empty">No messages yet</div>';
+  getEl('chat-send').disabled=true;
+  const bm=getEl('btn-mute'),bc=getEl('btn-cam');
+  if(bm){bm.textContent='🔊 Mute';bm.style.color='';bm.style.borderColor='';}
+  if(bc){bc.textContent='📷 Hide Cam';bc.style.color='';bc.style.borderColor='';}
+  updateQualityIndicator('good');
+  showIdleUI();
+}
+
+function toggleMute() {
+  if(!localStream) return;
+  const track=localStream.getAudioTracks()[0];if(!track) return;
+  isMuted=!isMuted;track.enabled=!isMuted;
+  const btn=getEl('btn-mute');
+  btn.textContent=isMuted?'🔇 Unmute':'🔊 Mute';
+  btn.style.color=isMuted?'var(--warn)':'';btn.style.borderColor=isMuted?'var(--warn-border)':'';
+}
+
+function toggleCamera() {
+  if(!localStream) return;
+  const track=localStream.getVideoTracks()[0];if(!track) return;
+  isCamHidden=!isCamHidden;track.enabled=!isCamHidden;
+  const btn=getEl('btn-cam');
+  btn.textContent=isCamHidden?'📷 Show Cam':'📷 Hide Cam';
+  btn.style.color=isCamHidden?'var(--warn)':'';btn.style.borderColor=isCamHidden?'var(--warn-border)':'';
+  getEl('local-video').style.opacity=isCamHidden?'0.2':'1';
+}
+
+// ── UI screens ────────────────────────────────────────────────
+function showIdleUI() {
+  getEl('card-idle').style.display='block';
+  getEl('card-busy').style.display='none';
+  getEl('card-video').style.display='none';
+  getEl('card-controls').style.display='none';
+  // Reset start button
+  const btn=getEl('btn-start');
+  btn.textContent='⬤ Start Call';btn.className='call-btn start';btn.onclick=startCall;
+}
+
+function showBusy() {
+  getEl('card-idle').style.display='none';
+  getEl('card-busy').style.display='block';
+  getEl('card-video').style.display='none';
+  getEl('card-controls').style.display='none';
+  setStreamStatus('','Call in progress');
+}
+
+function showJoinOption() {
+  getEl('card-idle').style.display='block';
+  getEl('card-busy').style.display='none';
+  getEl('card-video').style.display='none';
+  getEl('card-controls').style.display='none';
+  const btn=getEl('btn-start');
+  btn.textContent='📞 Join Call';btn.className='call-btn join';btn.onclick=joinCall;
+  setStreamStatus('live','Call in progress — tap to join');
+}
+
+function showCallUI() {
+  getEl('card-idle').style.display='none';
+  getEl('card-busy').style.display='none';
+  getEl('card-video').style.display='block';
+  getEl('card-controls').style.display='block';
+}
+
+// ── Poll presence ─────────────────────────────────────────────
+async function pollPresence() {
+  if(inCall) return;
+  const active=await checkSessionActive();
+  if(active) showJoinOption();
+  else showIdleUI();
+}
+
+// ── Init ──────────────────────────────────────────────────────
+function init() {
+  initSliders();
+  initSB();
+  pollPresence();
+}
+
+setInterval(pollPresence, 15000);
+init();
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
