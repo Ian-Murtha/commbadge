@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#0f1117">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CommBadge">
   <meta name="description" content="IPM's CommBadge — two-way video call">
   <link rel="manifest" href="manifest.json">
@@ -13,649 +13,205 @@
   <title>IPM's CommBadge</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Antonio:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      /* LCARS colour palette */
-      --black:   #000000;
-      --orange:  #FF9900;
-      --orange2: #FFCC66;
-      --amber:   #FF7700;
-      --tan:     #FFCC99;
-      --blue:    #9999FF;
-      --blue2:   #6666CC;
-      --red:     #CC4444;
-      --red2:    #FF6666;
-      --green:   #33CC33;
-      --purple:  #CC99CC;
-      --text:    #FF9900;
-      --text2:   #FFCC99;
-      --muted:   #996633;
-      --panel:   #111111;
+      --bg: #0f1117; --surface: #181b24; --surface2: #1f2330;
+      --border: rgba(255,255,255,0.08); --border2: rgba(255,255,255,0.14);
+      --text: #f0f0f0; --muted: #7a7f8e;
+      --accent: #a8f0c6; --accent-dim: rgba(168,240,198,0.12); --accent-border: rgba(168,240,198,0.3);
+      --danger: #f0a8a8; --danger-dim: rgba(240,168,168,0.12); --danger-border: rgba(240,168,168,0.3);
+      --warn: #f0d8a8; --warn-dim: rgba(240,216,168,0.12); --warn-border: rgba(240,216,168,0.3);
+      --blue: #a8d8f0; --blue-dim: rgba(168,216,240,0.12); --blue-border: rgba(168,216,240,0.3);
+      --green: #4cdb7a; --green-dim: rgba(76,219,122,0.12); --green-border: rgba(76,219,122,0.35);
+      --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+      --r: 12px; --r-sm: 8px;
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    body { display: flex; flex-direction: column; min-height: 100dvh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 
-      --antonio: 'Antonio', sans-serif;
-      --mono:    'Share Tech Mono', monospace;
-    }
+    main { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.875rem; max-width: 480px; margin: 0 auto; width: 100%; }
 
-    html, body {
-      height: 100%;
-      background: var(--black);
-      color: var(--text);
-      font-family: var(--antonio);
-      font-size: 15px;
-      line-height: 1.4;
-      -webkit-font-smoothing: antialiased;
-    }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 1.25rem; }
+    .section-label { font-size: 11px; font-family: var(--mono); color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.6rem; }
 
-    body {
-      display: flex;
-      flex-direction: column;
-      min-height: 100dvh;
-      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-    }
+    /* Status bar */
+    .status-bar { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 0.6rem 1rem; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+    .stream-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background 0.3s; }
+    .stream-dot.live       { background: var(--danger); box-shadow: 0 0 6px rgba(240,100,100,0.6); animation: pulse 1.5s infinite; }
+    .stream-dot.watching   { background: var(--accent); }
+    .stream-dot.connecting { background: var(--warn); }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
+    #stream-quality { margin-left: auto; font-size: 10px; font-family: var(--mono); color: var(--muted); }
 
-    /* ── LCARS Frame ── */
-    .lcars-frame {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      padding: 0 0 8px 0;
-    }
+    /* Call buttons */
+    .call-btn { width: 100%; padding: 14px; border-radius: var(--r-sm); font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: background 0.15s, transform 0.1s; border: 1px solid; }
+    .call-btn:active { transform: scale(0.99); }
+    .call-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .call-btn.green  { background: var(--green-dim);  border-color: var(--green-border);  color: var(--green); }
+    .call-btn.green:hover:not(:disabled)  { background: rgba(76,219,122,0.22); }
+    .call-btn.blue   { background: var(--blue-dim);   border-color: var(--blue-border);   color: var(--blue); }
+    .call-btn.blue:hover:not(:disabled)   { background: rgba(168,216,240,0.2); }
+    .call-btn.danger { background: var(--danger-dim); border-color: var(--danger-border); color: var(--danger); }
+    .call-btn.danger:hover:not(:disabled) { background: rgba(240,100,100,0.22); }
+    .call-btn.ctrl   { background: var(--surface2);   border-color: var(--border2);       color: var(--muted); }
+    .call-btn.ctrl:hover:not(:disabled)   { color: var(--text); }
+    .call-btn.warn   { background: var(--warn-dim);   border-color: var(--warn-border);   color: var(--warn); }
 
-    /* Top bar */
-    .lcars-top {
-      display: flex;
-      align-items: stretch;
-      height: 64px;
-      margin-bottom: 4px;
-      flex-shrink: 0;
-    }
+    .ctrl-row { display: flex; gap: 8px; margin-bottom: 0.75rem; }
+    .ctrl-row .call-btn { flex: 1; padding: 11px; }
 
-    .lcars-top-elbow {
-      width: 80px;
-      background: var(--orange);
-      border-radius: 32px 0 0 0;
-      flex-shrink: 0;
-    }
+    /* Video */
+    .call-video-wrap { position: relative; background: #000; border-radius: var(--r-sm); overflow: hidden; aspect-ratio: 16/9; border: 1px solid var(--border); }
+    .call-video-wrap video#remote-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .call-video-wrap video#local-video  { position: absolute; bottom: 8px; right: 8px; width: 26%; aspect-ratio: 16/9; object-fit: cover; border-radius: 4px; border: 2px solid rgba(255,255,255,0.2); background: #111; z-index: 2; }
+    .call-video-wrap .no-stream { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: center; padding: 1rem; }
 
-    .lcars-top-title {
-      flex: 1;
-      background: var(--black);
-      border-top: 8px solid var(--orange);
-      display: flex;
-      align-items: flex-start;
-      padding: 4px 16px 0;
-    }
-
-    .lcars-title-text {
-      font-family: var(--antonio);
-      font-size: 28px;
-      font-weight: 700;
-      color: var(--orange);
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      line-height: 1;
-    }
-
-    .lcars-title-sub {
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--muted);
-      letter-spacing: 0.2em;
-      margin-top: 2px;
-    }
-
-    .lcars-top-right {
-      width: 120px;
-      background: var(--orange);
-      border-radius: 0 32px 0 0;
-      flex-shrink: 0;
-    }
-
-    /* Body layout */
-    .lcars-body {
-      display: flex;
-      flex: 1;
-      min-height: 0;
-    }
-
-    /* Left sidebar */
-    .lcars-sidebar {
-      width: 40px;
-      flex-shrink: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      padding-bottom: 40px;
-    }
-
-    .sidebar-block {
-      border-radius: 0 0 0 20px;
-      flex-shrink: 0;
-    }
-
-    .sb-orange  { background: var(--orange);  height: 80px; }
-    .sb-blue    { background: var(--blue);    height: 50px; }
-    .sb-tan     { background: var(--tan);     height: 120px; }
-    .sb-purple  { background: var(--purple);  height: 40px; }
-    .sb-amber   { background: var(--amber);   height: 200px; }
-    .sb-blue2   { background: var(--blue2);   flex: 1; min-height: 30px; }
-
-    /* Content area */
-    .lcars-content {
-      flex: 1;
-      overflow-y: auto;
-      padding: 0 8px 8px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    /* Bottom bar */
-    .lcars-bottom {
-      display: flex;
-      align-items: stretch;
-      height: 40px;
-      margin-top: 4px;
-      flex-shrink: 0;
-    }
-
-    .lcars-bottom-elbow {
-      width: 80px;
-      background: var(--blue2);
-      border-radius: 0 0 0 20px;
-      flex-shrink: 0;
-    }
-
-    .lcars-bottom-bar {
-      flex: 1;
-      background: var(--blue2);
-      border-radius: 0 0 20px 0;
-    }
-
-    /* ── LCARS Panels ── */
-    .lcars-panel {
-      background: var(--panel);
-      border: 1px solid rgba(255,153,0,0.15);
-      border-left: 4px solid var(--orange);
-      border-radius: 0 8px 8px 0;
-      padding: 12px 14px;
-    }
-
-    .lcars-panel.blue-accent  { border-left-color: var(--blue); }
-    .lcars-panel.tan-accent   { border-left-color: var(--tan); }
-    .lcars-panel.red-accent   { border-left-color: var(--red2); }
-    .lcars-panel.purple-accent{ border-left-color: var(--purple); }
-
-    .panel-label {
-      font-family: var(--antonio);
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--muted);
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      margin-bottom: 8px;
-    }
-
-    /* ── Status bar ── */
-    .lcars-status {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      background: var(--panel);
-      border: 1px solid rgba(255,153,0,0.15);
-      border-radius: 0 20px 20px 0;
-      padding: 6px 16px 6px 12px;
-      border-left: 4px solid var(--orange2);
-    }
-
-    .stream-dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      background: var(--muted);
-      flex-shrink: 0;
-      transition: background 0.3s;
-    }
-    .stream-dot.live        { background: var(--red2); box-shadow: 0 0 8px var(--red2); animation: lcars-pulse 1.2s infinite; }
-    .stream-dot.watching    { background: var(--green); }
-    .stream-dot.connecting  { background: var(--orange2); }
-
-    @keyframes lcars-pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-
-    .status-text {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--orange2);
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      flex: 1;
-    }
-
-    #stream-quality {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--muted);
-      letter-spacing: 0.1em;
-    }
-
-    /* ── Camera selector ── */
-    .cam-row { display: flex; gap: 6px; margin-bottom: 12px; }
-
-    .lcars-cam-btn {
-      flex: 1;
-      padding: 8px;
-      border: 2px solid var(--muted);
-      border-radius: 20px;
-      background: transparent;
-      color: var(--muted);
-      font-family: var(--antonio);
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      cursor: pointer;
-      transition: all 0.15s;
-      text-align: center;
-    }
-    .lcars-cam-btn.active {
-      border-color: var(--orange);
-      color: var(--orange);
-      background: rgba(255,153,0,0.08);
-    }
-
-    /* ── Quality sliders ── */
-    .quality-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 8px;
-    }
-    .quality-label {
-      font-family: var(--antonio);
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--muted);
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      width: 72px;
-      flex-shrink: 0;
-      text-align: right;
-    }
-    .quality-val {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--orange2);
-      width: 76px;
-      flex-shrink: 0;
-    }
-
-    input[type="range"] {
-      flex: 1;
-      -webkit-appearance: none;
-      appearance: none;
-      height: 4px;
-      background: rgba(255,153,0,0.2);
-      border-radius: 999px;
-      outline: none;
-      cursor: pointer;
-    }
-    input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 18px; height: 18px;
-      border-radius: 50%;
-      background: var(--orange);
-      border: 2px solid var(--black);
-      cursor: pointer;
-    }
-    input[type="range"]::-moz-range-thumb {
-      width: 18px; height: 18px;
-      border-radius: 50%;
-      background: var(--orange);
-      border: 2px solid var(--black);
-      cursor: pointer;
-    }
-
-    /* ── LCARS Buttons ── */
-    .lcars-btn {
-      width: 100%;
-      padding: 12px 20px;
-      border-radius: 20px;
-      font-family: var(--antonio);
-      font-size: 16px;
-      font-weight: 700;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      cursor: pointer;
-      transition: opacity 0.15s, transform 0.1s;
-      border: none;
-      margin-bottom: 6px;
-      text-align: center;
-    }
-    .lcars-btn:last-child { margin-bottom: 0; }
-    .lcars-btn:active { transform: scale(0.98); }
-    .lcars-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-
-    .lcars-btn.orange  { background: var(--orange);  color: var(--black); }
-    .lcars-btn.blue    { background: var(--blue);    color: var(--black); }
-    .lcars-btn.tan     { background: var(--tan);     color: var(--black); }
-    .lcars-btn.red     { background: var(--red2);    color: var(--black); }
-    .lcars-btn.amber   { background: var(--amber);   color: var(--black); }
-    .lcars-btn.purple  { background: var(--purple);  color: var(--black); }
-    .lcars-btn.grey    { background: #444;           color: var(--orange2); }
-
-    .lcars-btn-row { display: flex; gap: 8px; margin-bottom: 8px; }
-    .lcars-btn-row .lcars-btn { margin-bottom: 0; }
-
-    /* ── Video ── */
-    .call-video-wrap {
-      position: relative;
-      background: #000;
-      border-radius: 4px;
-      overflow: hidden;
-      aspect-ratio: 16/9;
-      border: 2px solid var(--orange);
-    }
-    .call-video-wrap video#remote-video {
-      width: 100%; height: 100%;
-      object-fit: cover; display: block;
-    }
-    .call-video-wrap video#local-video {
-      position: absolute;
-      bottom: 8px; right: 8px;
-      width: 26%; aspect-ratio: 16/9;
-      object-fit: cover;
-      border-radius: 4px;
-      border: 2px solid var(--orange);
-      background: #111;
-      z-index: 2;
-    }
-    .call-video-wrap .no-stream {
-      position: absolute; inset: 0;
-      display: flex; align-items: center; justify-content: center;
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--muted);
-      text-align: center;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }
-
-    /* Scanline overlay for LCARS feel */
-    .call-video-wrap::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.04) 2px, rgba(0,0,0,0.04) 4px);
-      pointer-events: none;
-      z-index: 3;
-    }
-
-    /* ── Chat ── */
-    .chat-messages {
-      min-height: 90px;
-      max-height: 160px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      padding-bottom: 4px;
-    }
-    .chat-msg {
-      max-width: 85%;
-      padding: 6px 12px;
-      font-family: var(--mono);
-      font-size: 12px;
-      line-height: 1.5;
-      word-break: break-word;
-      letter-spacing: 0.05em;
-    }
-    .chat-msg.sent {
-      align-self: flex-end;
-      background: rgba(255,153,0,0.15);
-      border: 1px solid var(--orange);
-      border-radius: 12px 12px 0 12px;
-      color: var(--orange2);
-    }
-    .chat-msg.received {
-      align-self: flex-start;
-      background: rgba(153,153,255,0.12);
-      border: 1px solid var(--blue2);
-      border-radius: 12px 12px 12px 0;
-      color: var(--blue);
-    }
-    .chat-msg .msg-time {
-      font-size: 10px;
-      color: var(--muted);
-      margin-top: 2px;
-      letter-spacing: 0.08em;
-    }
-    .chat-empty {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--muted);
-      text-align: center;
-      padding: 1rem 0;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-    }
-    .chat-input-row {
-      display: flex;
-      gap: 8px;
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px solid rgba(255,153,0,0.2);
-    }
-    .chat-input {
-      flex: 1;
-      background: rgba(255,153,0,0.05);
-      border: 1px solid rgba(255,153,0,0.3);
-      border-radius: 20px;
-      color: var(--orange2);
-      font-family: var(--mono);
-      font-size: 13px;
-      padding: 8px 14px;
-      outline: none;
-      transition: border-color 0.15s;
-      letter-spacing: 0.05em;
-    }
-    .chat-input:focus { border-color: var(--orange); }
+    /* Chat */
+    .chat-messages { min-height: 90px; max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-bottom: 4px; }
+    .chat-msg { max-width: 85%; padding: 7px 11px; border-radius: 12px; font-size: 13px; line-height: 1.4; word-break: break-word; }
+    .chat-msg.sent     { align-self: flex-end; background: var(--accent-dim); border: 1px solid var(--accent-border); color: var(--text); border-bottom-right-radius: 3px; }
+    .chat-msg.received { align-self: flex-start; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 3px; }
+    .chat-msg .msg-time { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 3px; }
+    .chat-empty { font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: center; padding: 1rem 0; }
+    .chat-input-row { display: flex; gap: 8px; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+    .chat-input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text); font-family: var(--sans); font-size: 14px; padding: 9px 12px; outline: none; }
+    .chat-input:focus { border-color: var(--border2); }
     .chat-input::placeholder { color: var(--muted); }
-    .chat-send {
-      background: var(--blue2);
-      border: none;
-      border-radius: 20px;
-      color: var(--black);
-      font-family: var(--antonio);
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      padding: 8px 16px;
-      cursor: pointer;
-      transition: opacity 0.15s;
-    }
-    .chat-send:hover { opacity: 0.85; }
-    .chat-send:disabled { opacity: 0.3; cursor: not-allowed; }
+    .chat-send { background: var(--accent-dim); border: 1px solid var(--accent-border); border-radius: var(--r-sm); color: var(--accent); font-family: var(--mono); font-size: 12px; padding: 9px 14px; cursor: pointer; white-space: nowrap; }
+    .chat-send:hover { background: rgba(168,240,198,0.22); }
+    .chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    /* ── Busy screen ── */
-    .busy-screen {
-      text-align: center;
-      padding: 2rem 1rem;
-    }
-    .busy-icon { font-size: 40px; margin-bottom: 10px; }
-    .busy-text {
-      font-family: var(--mono);
-      font-size: 13px;
-      color: var(--muted);
-      letter-spacing: 0.1em;
-      line-height: 1.8;
-      text-transform: uppercase;
-    }
+    /* Busy */
+    .busy-card { text-align: center; padding: 2.5rem 1rem; }
+    .busy-icon { font-size: 40px; margin-bottom: 0.75rem; }
+    .busy-text { font-family: var(--mono); font-size: 13px; color: var(--muted); line-height: 1.8; }
 
-    /* ── Divider ── */
-    .lcars-divider {
-      height: 3px;
-      background: linear-gradient(to right, var(--orange), var(--blue2), transparent);
-      border-radius: 999px;
-      margin: 2px 0;
-    }
+    /* Settings collapsible */
+    .settings-toggle { width: 100%; padding: 10px; background: transparent; border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--muted); font-family: var(--mono); font-size: 12px; cursor: pointer; transition: color 0.15s, border-color 0.15s; display: flex; align-items: center; justify-content: space-between; }
+    .settings-toggle:hover { color: var(--text); border-color: var(--border2); }
+    .settings-arrow { transition: transform 0.2s; display: inline-block; }
+    .settings-arrow.open { transform: rotate(180deg); }
+    .settings-body { display: none; padding-top: 1rem; }
+    .settings-body.open { display: block; }
+    .settings-notice { background: var(--warn-dim); border: 1px solid var(--warn-border); border-radius: var(--r-sm); padding: 0.65rem 0.875rem; font-family: var(--mono); font-size: 11px; color: var(--warn); margin-bottom: 0.875rem; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .refresh-btn { background: var(--warn-dim); border: 1px solid var(--warn-border); border-radius: var(--r-sm); color: var(--warn); font-family: var(--mono); font-size: 11px; padding: 4px 10px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+    .refresh-btn:hover { background: rgba(240,216,168,0.25); }
 
-    /* ── Toast ── */
-    .toast {
-      position: fixed;
-      bottom: calc(1.5rem + env(safe-area-inset-bottom));
-      left: 50%;
-      transform: translateX(-50%) translateY(10px);
-      background: var(--panel);
-      border: 2px solid var(--orange);
-      border-radius: 20px;
-      padding: 8px 20px;
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--orange2);
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      opacity: 0;
-      transition: opacity 0.2s, transform 0.2s;
-      pointer-events: none;
-      white-space: nowrap;
-      z-index: 400;
-    }
+    /* Camera toggle */
+    .cam-toggle { width: 100%; padding: 9px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface2); color: var(--muted); font-family: var(--mono); font-size: 12px; cursor: pointer; transition: all 0.15s; margin-bottom: 0.875rem; }
+    .cam-toggle:hover { color: var(--text); border-color: var(--border2); }
+
+    /* Sliders */
+    .quality-row { display: flex; align-items: center; gap: 10px; margin-bottom: 0.6rem; }
+    .quality-label { font-family: var(--mono); font-size: 11px; color: var(--muted); width: 68px; flex-shrink: 0; text-align: right; letter-spacing: 0.05em; text-transform: uppercase; }
+    .quality-val { font-family: var(--mono); font-size: 11px; color: var(--accent); width: 72px; flex-shrink: 0; }
+    input[type="range"] { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; background: var(--surface2); border-radius: 999px; outline: none; border: 1px solid var(--border); cursor: pointer; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); cursor: pointer; }
+    input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); cursor: pointer; }
+
+    /* Toast */
+    .toast { position: fixed; bottom: calc(1.5rem + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%) translateY(10px); background: var(--surface2); border: 1px solid var(--border2); border-radius: 999px; padding: 9px 20px; font-family: var(--mono); font-size: 12px; color: var(--text); opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; white-space: nowrap; z-index: 400; }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   </style>
 </head>
 <body>
+<main>
 
-<div class="lcars-frame">
-
-  <!-- Top bar -->
-  <div class="lcars-top">
-    <div class="lcars-top-elbow"></div>
-    <div class="lcars-top-title">
-      <div>
-        <div class="lcars-title-text">CommBadge</div>
-        <div class="lcars-title-sub">IPM COMMUNICATIONS SYSTEM — ACTIVE</div>
-      </div>
-    </div>
-    <div class="lcars-top-right"></div>
+  <!-- Status bar -->
+  <div class="status-bar">
+    <span class="stream-dot" id="stream-dot"></span>
+    <span id="stream-status-text" style="font-family:var(--mono);font-size:12px">Ready</span>
+    <span id="stream-quality"></span>
   </div>
 
-  <!-- Body -->
-  <div class="lcars-body">
+  <!-- Start / Join button (always visible when not in call) -->
+  <div id="card-action">
+    <button class="call-btn green" id="btn-start" onclick="startCall()">&#9679; Start Call</button>
+  </div>
 
-    <!-- Left sidebar -->
-    <div class="lcars-sidebar">
-      <div class="sidebar-block sb-orange"></div>
-      <div class="sidebar-block sb-blue"></div>
-      <div class="sidebar-block sb-tan"></div>
-      <div class="sidebar-block sb-purple"></div>
-      <div class="sidebar-block sb-amber"></div>
-      <div class="sidebar-block sb-blue2"></div>
-    </div>
-
-    <!-- Content -->
-    <div class="lcars-content">
-
-      <!-- Status -->
-      <div class="lcars-status">
-        <span class="stream-dot" id="stream-dot"></span>
-        <span class="status-text" id="stream-status-text">SYSTEM READY</span>
-        <span id="stream-quality"></span>
+  <!-- Busy screen -->
+  <div id="card-busy" style="display:none">
+    <div class="card">
+      <div class="busy-card">
+        <div class="busy-icon">📵</div>
+        <div class="busy-text">A call is already in progress.<br>Please try again later.</div>
       </div>
-
-      <!-- Idle screen -->
-      <div id="card-idle">
-        <div class="lcars-panel">
-          <div class="panel-label">Input Device</div>
-          <div class="cam-row">
-            <button class="lcars-cam-btn active" id="cam-rear"  onclick="selectCamera('rear')">&#9654; Rear</button>
-            <button class="lcars-cam-btn"        id="cam-front" onclick="selectCamera('front')">&#9654; Front</button>
-          </div>
-          <div class="panel-label">Transmission Quality</div>
-          <div class="quality-row">
-            <span class="quality-label">Resolution</span>
-            <input type="range" id="sl-res" min="0" max="3" step="1" value="1" oninput="updateSliders()">
-            <span class="quality-val" id="lbl-res">480×360</span>
-          </div>
-          <div class="quality-row">
-            <span class="quality-label">Frame Rate</span>
-            <input type="range" id="sl-fps" min="0" max="4" step="1" value="1" oninput="updateSliders()">
-            <span class="quality-val" id="lbl-fps">15 FPS</span>
-          </div>
-          <div class="quality-row" style="margin-bottom:0">
-            <span class="quality-label">Bitrate</span>
-            <input type="range" id="sl-bps" min="0" max="4" step="1" value="2" oninput="updateSliders()">
-            <span class="quality-val" id="lbl-bps">400 KBPS</span>
-          </div>
-        </div>
-        <div style="height:10px"></div>
-        <button class="lcars-btn orange" id="btn-start" onclick="startCall()">&#9679; Initiate Channel</button>
-      </div>
-
-      <!-- Busy screen -->
-      <div id="card-busy" style="display:none">
-        <div class="lcars-panel red-accent">
-          <div class="busy-screen">
-            <div class="busy-icon">📵</div>
-            <div class="busy-text">Channel in use.<br>Please stand by.</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Active call video -->
-      <div id="card-video" style="display:none">
-        <div class="call-video-wrap">
-          <video id="remote-video" autoplay playsinline></video>
-          <video id="local-video"  autoplay muted playsinline></video>
-          <div class="no-stream" id="no-stream-msg">Awaiting connection…</div>
-        </div>
-      </div>
-
-      <!-- Active call controls + chat -->
-      <div id="card-controls" style="display:none">
-        <div class="lcars-panel blue-accent">
-          <div class="lcars-btn-row">
-            <button class="lcars-btn amber" id="btn-mute" onclick="toggleMute()">Mute</button>
-            <button class="lcars-btn tan"   id="btn-cam"  onclick="toggleCamera()">Hide Cam</button>
-          </div>
-          <button class="lcars-btn red" onclick="stopStream()">&#9632; Close Channel</button>
-        </div>
-        <div style="height:8px"></div>
-        <div class="lcars-panel purple-accent">
-          <div class="panel-label">Comm Channel</div>
-          <div class="chat-messages" id="chat-messages">
-            <div class="chat-empty" id="chat-empty">— No transmissions —</div>
-          </div>
-          <div class="chat-input-row">
-            <input type="text" class="chat-input" id="chat-input" placeholder="Transmit message…" onkeydown="chatKeydown(event)" maxlength="500">
-            <button class="chat-send" id="chat-send" onclick="sendChatMessage()" disabled>Send</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="lcars-divider"></div>
-
     </div>
   </div>
 
-  <!-- Bottom bar -->
-  <div class="lcars-bottom">
-    <div class="lcars-bottom-elbow"></div>
-    <div class="lcars-bottom-bar"></div>
+  <!-- Active call: video -->
+  <div id="card-video" style="display:none">
+    <div class="call-video-wrap">
+      <video id="remote-video" autoplay playsinline></video>
+      <video id="local-video"  autoplay muted playsinline></video>
+      <div class="no-stream" id="no-stream-msg">Waiting for other user…</div>
+    </div>
   </div>
 
-</div>
+  <!-- Active call: controls + chat -->
+  <div id="card-controls" style="display:none">
+    <div class="card">
+      <div class="ctrl-row">
+        <button class="call-btn ctrl" id="btn-mute"    onclick="toggleMute()">🔊 Mute</button>
+        <button class="call-btn warn" id="btn-cam"     onclick="toggleCamera()">📷 Hide Cam</button>
+        <button class="call-btn ctrl" id="btn-flipcam" onclick="flipCamera()">🔄 Flip</button>
+      </div>
+      <button class="call-btn danger" onclick="stopStream()">&#9632; End Call</button>
+    </div>
+    <div class="card" style="margin-top:0">
+      <p class="section-label">Chat</p>
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-empty" id="chat-empty">No messages yet</div>
+      </div>
+      <div class="chat-input-row">
+        <input type="text" class="chat-input" id="chat-input" placeholder="Type a message…" onkeydown="chatKeydown(event)" maxlength="500">
+        <button class="chat-send" id="chat-send" onclick="sendChatMessage()" disabled>Send</button>
+      </div>
+    </div>
+  </div>
 
+  <!-- Settings (collapsible, always at bottom) -->
+  <div id="card-settings">
+    <button class="settings-toggle" onclick="toggleSettings()">
+      <span>&#9881; Settings</span>
+      <span class="settings-arrow" id="settings-arrow">&#9660;</span>
+    </button>
+    <div class="settings-body" id="settings-body">
+      <div class="settings-notice">
+        <span>Changes take effect on next call</span>
+        <button class="refresh-btn" onclick="location.reload()">&#8635; Refresh</button>
+      </div>
+      <div class="section-label" style="margin-bottom:0.5rem">Camera</div>
+      <button class="cam-toggle" id="cam-toggle-btn" onclick="toggleCameraFacing()">📷 Using Rear Camera</button>
+      <div class="section-label" style="margin-bottom:0.5rem">Stream Quality</div>
+      <div class="quality-row">
+        <span class="quality-label">Resolution</span>
+        <input type="range" id="sl-res" min="0" max="3" step="1" value="1" oninput="updateSliders()">
+        <span class="quality-val" id="lbl-res">480×360</span>
+      </div>
+      <div class="quality-row">
+        <span class="quality-label">Frame Rate</span>
+        <input type="range" id="sl-fps" min="0" max="4" step="1" value="1" oninput="updateSliders()">
+        <span class="quality-val" id="lbl-fps">15 fps</span>
+      </div>
+      <div class="quality-row">
+        <span class="quality-label">Bitrate</span>
+        <input type="range" id="sl-bps" min="0" max="4" step="1" value="2" oninput="updateSliders()">
+        <span class="quality-val" id="lbl-bps">400 kbps</span>
+      </div>
+    </div>
+  </div>
+
+</main>
 <div class="toast" id="toast"></div>
 
 <script>
 // ── Config ────────────────────────────────────────────────────
 // Signalling uses a dedicated Supabase project, separate from the main
 // MurDough Matrix database, keeping primary data credentials private.
-// ROADMAP: Evaluate further credential management options as the app scales.
 const SB_URL    = 'https://qxxxlpdbfzlsgqnffqsg.supabase.co';
 const SB_KEY    = 'sb_publishable_6oiKJUELnMY6Q6OAtExsiw_gi3uZ_I9';
 const STREAM_CH = 'commbadge-stream';
@@ -677,11 +233,11 @@ const RES_OPTIONS = [
 ];
 const FPS_OPTIONS = [8, 15, 24, 30, 60];
 const BPS_OPTIONS = [
-  { label:'100 KBPS', bps:100000  },
-  { label:'200 KBPS', bps:200000  },
-  { label:'400 KBPS', bps:400000  },
-  { label:'800 KBPS', bps:800000  },
-  { label:'1.5 MBPS', bps:1500000 },
+  { label:'100 kbps', bps:100000  },
+  { label:'200 kbps', bps:200000  },
+  { label:'400 kbps', bps:400000  },
+  { label:'800 kbps', bps:800000  },
+  { label:'1.5 Mbps', bps:1500000 },
 ];
 
 function getQualitySettings() {
@@ -694,7 +250,7 @@ function getQualitySettings() {
 function updateSliders() {
   const ri=parseInt(getEl('sl-res').value), fi=parseInt(getEl('sl-fps').value), bi=parseInt(getEl('sl-bps').value);
   getEl('lbl-res').textContent = RES_OPTIONS[ri].label;
-  getEl('lbl-fps').textContent = FPS_OPTIONS[fi]+' FPS';
+  getEl('lbl-fps').textContent = FPS_OPTIONS[fi]+' fps';
   getEl('lbl-bps').textContent = BPS_OPTIONS[bi].label;
   localStorage.setItem('cb_sl_res',ri); localStorage.setItem('cb_sl_fps',fi); localStorage.setItem('cb_sl_bps',bi);
 }
@@ -703,6 +259,13 @@ function initSliders() {
   const ri=parseInt(localStorage.getItem('cb_sl_res')??'1'), fi=parseInt(localStorage.getItem('cb_sl_fps')??'1'), bi=parseInt(localStorage.getItem('cb_sl_bps')??'2');
   getEl('sl-res').value=ri; getEl('sl-fps').value=fi; getEl('sl-bps').value=bi;
   updateSliders();
+}
+
+function toggleSettings() {
+  const body=getEl('settings-body'), arrow=getEl('settings-arrow');
+  const isOpen=body.classList.contains('open');
+  body.classList.toggle('open',!isOpen);
+  arrow.classList.toggle('open',!isOpen);
 }
 
 // ── State ─────────────────────────────────────────────────────
@@ -736,19 +299,42 @@ function showToast(msg) {
 function setStreamStatus(state, msg) {
   const dot=getEl('stream-dot');
   dot.className='stream-dot'+(state==='live'?' live':state==='watching'?' watching':state==='connecting'?' connecting':'');
-  getEl('stream-status-text').textContent=msg.toUpperCase();
+  getEl('stream-status-text').textContent=msg;
 }
 
-// ── Camera ────────────────────────────────────────────────────
-function selectCamera(facing) {
-  selectedCamera=facing;
-  getEl('cam-rear').classList.toggle('active',facing==='rear');
-  getEl('cam-front').classList.toggle('active',facing==='front');
+// ── Camera toggle ─────────────────────────────────────────────
+function toggleCameraFacing() {
+  selectedCamera = selectedCamera==='rear' ? 'front' : 'rear';
+  localStorage.setItem('cb_camera', selectedCamera);
+  getEl('cam-toggle-btn').textContent = selectedCamera==='rear' ? '📷 Using Rear Camera' : '🤳 Using Front Camera';
+}
+
+// Flip camera mid-call by replacing video track
+async function flipCamera() {
+  if (!localStream) return;
+  selectedCamera = selectedCamera==='rear' ? 'front' : 'rear';
+  try {
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:selectedCamera==='rear'?'environment':'user' },
+      audio:false
+    });
+    const newTrack = newStream.getVideoTracks()[0];
+    // Replace track in peer connection
+    if (peerConnection) {
+      const sender = peerConnection.getSenders().find(s=>s.track?.kind==='video');
+      if (sender) await sender.replaceTrack(newTrack);
+    }
+    // Replace in local stream
+    const oldTrack = localStream.getVideoTracks()[0];
+    if (oldTrack) { oldTrack.stop(); localStream.removeTrack(oldTrack); }
+    localStream.addTrack(newTrack);
+    getEl('local-video').srcObject = localStream;
+  } catch(err) { showToast('Could not flip camera'); }
 }
 
 async function getLocalStream() {
   const {res,fps}=getQualitySettings();
-  return await navigator.mediaDevices.getUserMedia({
+  const stream = await navigator.mediaDevices.getUserMedia({
     video:{ facingMode:selectedCamera==='rear'?'environment':'user', width:{ideal:res.w,max:res.w}, height:{ideal:res.h,max:res.h}, frameRate:{ideal:fps,max:fps} },
     audio:{
       echoCancellation:true,
@@ -759,6 +345,18 @@ async function getLocalStream() {
       sampleRate:16000
     }
   });
+  return stream;
+}
+
+// ── Audio routing fix ─────────────────────────────────────────
+async function restoreAudioOutput() {
+  try {
+    const rv = getEl('remote-video');
+    // Try to set sink to default (restores original audio routing)
+    if (rv.setSinkId) {
+      await rv.setSinkId('default');
+    }
+  } catch(err) {}
 }
 
 // ── Supabase ──────────────────────────────────────────────────
@@ -811,7 +409,6 @@ async function applyBitrateLimit(pc) {
   startAdaptiveBitrate(pc); startKeyframeInterval(pc);
 }
 
-// ── Adaptive bitrate ──────────────────────────────────────────
 function startAdaptiveBitrate(pc) {
   if(adaptiveTimer) clearInterval(adaptiveTimer);
   adaptiveTimer=setInterval(async()=>{
@@ -858,9 +455,9 @@ function startKeyframeInterval(pc) {
 
 function updateQualityIndicator(level) {
   const el=getEl('stream-quality');if(!el) return;
-  const map={good:{text:'SIG: GOOD',color:'#33CC33'},fair:{text:'SIG: FAIR',color:'#FF9900'},poor:{text:'SIG: POOR',color:'#CC4444'}};
+  const map={good:{text:'Good',color:'var(--accent)'},fair:{text:'Fair',color:'var(--warn)'},poor:{text:'Poor',color:'var(--danger)'}};
   const q=map[level]||map.good;el.textContent=q.text;el.style.color=q.color;
-  el.style.fontFamily="'Share Tech Mono', monospace";el.style.fontSize='11px';
+  el.style.fontFamily="var(--mono)";el.style.fontSize='11px';
 }
 
 // ── Signalling ────────────────────────────────────────────────
@@ -882,7 +479,7 @@ function setupChannel() {
   rtcChannel.on('broadcast',{event:'offer'},async({payload})=>{
     if(!inCall||isInitiator||negotiating) return;
     negotiating=true;remoteDescSet=false;pendingCandidates=[];
-    setStreamStatus('connecting','Establishing channel…');
+    setStreamStatus('connecting','Connecting…');
     if(peerConnection){peerConnection.close();peerConnection=null;}
     await createPC(false);
     await peerConnection.setRemoteDescription(new RTCSessionDescription(payload.sdp));
@@ -901,12 +498,12 @@ function setupChannel() {
   });
 
   rtcChannel.on('broadcast',{event:'call-ended'},()=>{
-    if(inCall){cleanup();setStreamStatus('','Channel closed');showToast('Channel closed');}
+    if(inCall){cleanup();setStreamStatus('','Call ended');showToast('Call ended');}
   });
 
   rtcChannel.on('broadcast',{event:'responder-ready'},async()=>{
     if(!inCall||!isInitiator||!peerConnection) return;
-    await sendOffer(); setStreamStatus('connecting','Establishing channel…');
+    await sendOffer(); setStreamStatus('connecting','Connecting…');
   });
 
   return new Promise(resolve=>{rtcChannel.subscribe(status=>{if(status==='SUBSCRIBED')resolve();});});
@@ -924,9 +521,10 @@ async function createPC(initiator) {
     const state=peerConnection?.connectionState;
     if(state==='connected'){
       negotiating=false;
-      setStreamStatus('live','Channel open');
+      setStreamStatus('live','In call');
       applyBitrateLimit(peerConnection);
       getEl('no-stream-msg').style.display='none';
+      restoreAudioOutput();
       vibrate();
     } else if(state==='disconnected'){
       setStreamStatus('connecting','Reconnecting…');
@@ -937,7 +535,10 @@ async function createPC(initiator) {
   };
 
   peerConnection.ontrack=({streams})=>{
-    const rv=getEl('remote-video');rv.srcObject=streams[0];rv.play().catch(()=>{});
+    const rv=getEl('remote-video');
+    rv.srcObject=streams[0];
+    rv.play().catch(()=>{});
+    restoreAudioOutput();
     getEl('no-stream-msg').style.display='none';
   };
 
@@ -960,7 +561,6 @@ async function sendOffer() {
   rtcChannel.send({type:'broadcast',event:'offer',payload:{sdp:constrained}});
 }
 
-// ── ICE restart ───────────────────────────────────────────────
 async function tryIceRestart(pc) {
   if(!pc||!rtcChannel) return;
   try{
@@ -972,10 +572,10 @@ async function tryIceRestart(pc) {
 }
 
 function autoReconnect() {
-  if(!inCall||reconnectAttempts>=5){cleanup();setStreamStatus('','Channel lost');reconnectAttempts=0;return;}
+  if(!inCall||reconnectAttempts>=5){cleanup();setStreamStatus('','Could not reconnect');reconnectAttempts=0;return;}
   reconnectAttempts++;
   const delay=Math.min(2000*reconnectAttempts,10000);
-  setStreamStatus('connecting',`Reconnecting ${reconnectAttempts}/5…`);
+  setStreamStatus('connecting',`Reconnecting… (${reconnectAttempts}/5)`);
   reconnectTimer=setTimeout(async()=>{
     if(!inCall) return;
     if(peerConnection){peerConnection.close();peerConnection=null;}
@@ -988,7 +588,7 @@ function autoReconnect() {
 
 // ── Chat ──────────────────────────────────────────────────────
 function setupDataChannel(dc) {
-  dc.onopen=()=>{getEl('chat-send').disabled=false;getEl('chat-input').placeholder='Transmit message…';};
+  dc.onopen=()=>{getEl('chat-send').disabled=false;getEl('chat-input').placeholder='Type a message…';};
   dc.onclose=()=>{getEl('chat-send').disabled=true;};
   dc.onmessage=({data})=>{try{const msg=JSON.parse(data);appendChat(msg.text,false,msg.time);}catch(e){}};
 }
@@ -1023,7 +623,7 @@ async function startCall() {
   inCall=true;isInitiator=true;isMuted=false;isCamHidden=false;
   remoteDescSet=false;pendingCandidates=[];negotiating=false;
   const lv=getEl('local-video');lv.srcObject=localStream;lv.play().catch(()=>{});
-  showCallUI();setStreamStatus('connecting','Awaiting response…');
+  showCallUI();setStreamStatus('connecting','Waiting for other user…');
   await setSessionActive(true);
   await setupChannel();
   await createPC(true);
@@ -1035,7 +635,7 @@ async function joinCall() {
   inCall=true;isInitiator=false;isMuted=false;isCamHidden=false;
   remoteDescSet=false;pendingCandidates=[];negotiating=false;
   const lv=getEl('local-video');lv.srcObject=localStream;lv.play().catch(()=>{});
-  showCallUI();setStreamStatus('connecting','Opening channel…');
+  showCallUI();setStreamStatus('connecting','Joining call…');
   await setupChannel();
   await createPC(false);
   rtcChannel.send({type:'broadcast',event:'responder-ready',payload:{}});
@@ -1044,7 +644,7 @@ async function joinCall() {
 function stopStream() {
   if(inCall&&rtcChannel) rtcChannel.send({type:'broadcast',event:'call-ended',payload:{}});
   if(inCall) setSessionActive(false);
-  cleanup();setStreamStatus('','Channel closed');
+  cleanup();setStreamStatus('','Call ended');
 }
 
 function cleanup() {
@@ -1062,11 +662,11 @@ function cleanup() {
   lv.srcObject=null;lv.style.opacity='1';rv.srcObject=null;
   getEl('no-stream-msg').style.display='flex';
   const chatCont=getEl('chat-messages');
-  if(chatCont) chatCont.innerHTML='<div class="chat-empty" id="chat-empty">— No transmissions —</div>';
+  if(chatCont) chatCont.innerHTML='<div class="chat-empty" id="chat-empty">No messages yet</div>';
   getEl('chat-send').disabled=true;
   const bm=getEl('btn-mute'),bc=getEl('btn-cam');
-  if(bm){bm.textContent='Mute';bm.style.background='';}
-  if(bc){bc.textContent='Hide Cam';bc.style.background='';}
+  if(bm){bm.textContent='🔊 Mute';bm.style.background='';}
+  if(bc){bc.textContent='📷 Hide Cam';bc.style.background='';}
   updateQualityIndicator('good');
   showIdleUI();
 }
@@ -1076,8 +676,8 @@ function toggleMute() {
   const track=localStream.getAudioTracks()[0];if(!track) return;
   isMuted=!isMuted;track.enabled=!isMuted;
   const btn=getEl('btn-mute');
-  btn.textContent=isMuted?'Unmute':'Mute';
-  btn.style.background=isMuted?'var(--muted)':'';
+  btn.textContent=isMuted?'🔇 Unmute':'🔊 Mute';
+  btn.className=isMuted?'call-btn warn':'call-btn ctrl';
 }
 
 function toggleCamera() {
@@ -1085,48 +685,52 @@ function toggleCamera() {
   const track=localStream.getVideoTracks()[0];if(!track) return;
   isCamHidden=!isCamHidden;track.enabled=!isCamHidden;
   const btn=getEl('btn-cam');
-  btn.textContent=isCamHidden?'Show Cam':'Hide Cam';
-  btn.style.background=isCamHidden?'var(--muted)':'';
+  btn.textContent=isCamHidden?'📷 Show Cam':'📷 Hide Cam';
+  btn.className=isCamHidden?'call-btn ctrl':'call-btn warn';
   getEl('local-video').style.opacity=isCamHidden?'0.15':'1';
 }
 
 // ── UI screens ────────────────────────────────────────────────
 function showIdleUI() {
-  getEl('card-idle').style.display='block';
+  getEl('card-action').style.display='block';
   getEl('card-busy').style.display='none';
   getEl('card-video').style.display='none';
   getEl('card-controls').style.display='none';
+  getEl('card-settings').style.display='block';
   const btn=getEl('btn-start');
-  btn.textContent='⬤ Initiate Channel';
-  btn.className='lcars-btn orange';
+  btn.textContent='⬤ Start Call';
+  btn.className='call-btn green';
   btn.onclick=startCall;
 }
 
 function showBusy() {
-  getEl('card-idle').style.display='none';
+  getEl('card-action').style.display='none';
   getEl('card-busy').style.display='block';
   getEl('card-video').style.display='none';
   getEl('card-controls').style.display='none';
-  setStreamStatus('','Channel in use');
+  getEl('card-settings').style.display='none';
+  setStreamStatus('','Call in progress');
 }
 
 function showJoinOption() {
-  getEl('card-idle').style.display='block';
+  getEl('card-action').style.display='block';
   getEl('card-busy').style.display='none';
   getEl('card-video').style.display='none';
   getEl('card-controls').style.display='none';
+  getEl('card-settings').style.display='block';
   const btn=getEl('btn-start');
-  btn.textContent='📡 Open Channel';
-  btn.className='lcars-btn blue';
+  btn.textContent='📞 Join Call';
+  btn.className='call-btn blue';
   btn.onclick=joinCall;
-  setStreamStatus('live','Channel active — open to join');
+  setStreamStatus('live','Call in progress — tap to join');
 }
 
 function showCallUI() {
-  getEl('card-idle').style.display='none';
+  getEl('card-action').style.display='none';
   getEl('card-busy').style.display='none';
   getEl('card-video').style.display='block';
   getEl('card-controls').style.display='block';
+  getEl('card-settings').style.display='none';
 }
 
 // ── Poll presence ─────────────────────────────────────────────
@@ -1138,7 +742,15 @@ async function pollPresence() {
 }
 
 // ── Init ──────────────────────────────────────────────────────
-function init() { initSliders(); initSB(); pollPresence(); }
+function init() {
+  // Restore camera preference
+  selectedCamera = localStorage.getItem('cb_camera') || 'rear';
+  getEl('cam-toggle-btn').textContent = selectedCamera==='rear' ? '📷 Using Rear Camera' : '🤳 Using Front Camera';
+  initSliders();
+  initSB();
+  pollPresence();
+}
+
 setInterval(pollPresence,15000);
 init();
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
