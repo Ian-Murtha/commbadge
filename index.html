@@ -197,11 +197,14 @@
         <input type="range" id="sl-fps" min="0" max="4" step="1" value="1" oninput="updateSliders()">
         <span class="quality-val" id="lbl-fps">15 fps</span>
       </div>
-      <div class="quality-row">
+      <div class="quality-row" style="margin-bottom:1rem">
         <span class="quality-label">Bitrate</span>
         <input type="range" id="sl-bps" min="0" max="4" step="1" value="2" oninput="updateSliders()">
         <span class="quality-val" id="lbl-bps">400 kbps</span>
       </div>
+      <div class="section-label" style="margin-bottom:0.5rem">App Update</div>
+      <button class="call-btn blue" style="padding:10px" onclick="checkForUpdate()">&#8635; Check for Update</button>
+      <div style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v1.03</div>
     </div>
   </div>
 
@@ -739,6 +742,19 @@ async function pollPresence() {
   const active=await checkSessionActive();
   if(active) showJoinOption();
   else showIdleUI();
+}
+
+// ── Update ────────────────────────────────────────────────────
+async function checkForUpdate() {
+  showToast('Checking for update…');
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    await Promise.all((await caches.keys()).map(k => caches.delete(k)));
+    window.location.reload(true);
+  } catch (err) { window.location.reload(true); }
 }
 
 // ── Init ──────────────────────────────────────────────────────
