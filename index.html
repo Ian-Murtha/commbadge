@@ -47,7 +47,7 @@
     #stream-quality { margin-left: auto; font-size: 10px; font-family: var(--mono); color: var(--muted); }
 
     /* Call buttons */
-    .call-btn { width: 100%; padding: 14px; border-radius: var(--r-sm); font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: background 0.15s, transform 0.1s; border: 1px solid; }
+    .call-btn { width: 100%; padding: 15px; border-radius: var(--r-sm); font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: background 0.15s, transform 0.1s; border: 1px solid; min-height: 48px; }
     .call-btn:active { transform: scale(0.99); }
     .call-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .call-btn.green  { background: var(--green-dim);  border-color: var(--green-border);  color: var(--green); }
@@ -61,7 +61,7 @@
     .call-btn.warn   { background: var(--warn-dim);   border-color: var(--warn-border);   color: var(--warn); }
 
     .ctrl-row { display: flex; gap: 8px; margin-bottom: 0.75rem; }
-    .ctrl-row .call-btn { flex: 1; padding: 11px; }
+    .ctrl-row .call-btn { flex: 1; padding: 13px; min-height: 48px; }
 
     /* Video */
     .call-video-wrap { position: relative; background: #000; border-radius: var(--r-sm); overflow: hidden; aspect-ratio: 16/9; border: 1px solid var(--border); }
@@ -96,9 +96,6 @@
     .settings-arrow.open { transform: rotate(180deg); }
     .settings-body { display: none; padding-top: 1rem; }
     .settings-body.open { display: block; }
-    .settings-notice { background: var(--warn-dim); border: 1px solid var(--warn-border); border-radius: var(--r-sm); padding: 0.65rem 0.875rem; font-family: var(--mono); font-size: 11px; color: var(--warn); margin-bottom: 0.875rem; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .refresh-btn { background: var(--warn-dim); border: 1px solid var(--warn-border); border-radius: var(--r-sm); color: var(--warn); font-family: var(--mono); font-size: 11px; padding: 4px 10px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
-    .refresh-btn:hover { background: rgba(240,216,168,0.25); }
 
     /* Camera toggle */
     .cam-toggle { width: 100%; padding: 9px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface2); color: var(--muted); font-family: var(--mono); font-size: 12px; cursor: pointer; transition: all 0.15s; margin-bottom: 0.875rem; }
@@ -119,6 +116,12 @@
 </head>
 <body>
 <main>
+
+  <!-- iOS non-Safari install tip -->
+  <div id="ios-tip" style="display:none;background:var(--blue-dim);border:1px solid var(--blue-border);border-radius:var(--r-sm);padding:0.6rem 0.875rem;font-family:var(--mono);font-size:11px;color:var(--blue);line-height:1.6">
+    &#9432; To install this app on iPhone, open in <strong>Safari</strong> and tap Share → Add to Home Screen.
+    <button onclick="this.parentElement.style.display='none'" style="float:right;background:transparent;border:none;color:var(--blue);cursor:pointer;font-size:13px;margin-left:8px">✕</button>
+  </div>
 
   <!-- Status bar -->
   <div class="status-bar">
@@ -148,6 +151,7 @@
       <video id="remote-video" autoplay playsinline></video>
       <video id="local-video"  autoplay muted playsinline></video>
       <div class="no-stream" id="no-stream-msg">Waiting for other user…</div>
+      <div id="tap-audio-prompt" style="display:none;position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.2);border-radius:999px;padding:6px 16px;font-family:var(--mono);font-size:11px;color:#fff;cursor:pointer;z-index:5;white-space:nowrap" onclick="dismissAudioPrompt()">▶ Tap to hear audio</div>
     </div>
   </div>
 
@@ -180,10 +184,6 @@
       <span class="settings-arrow" id="settings-arrow">&#9660;</span>
     </button>
     <div class="settings-body" id="settings-body">
-      <div class="settings-notice">
-        <span>Changes take effect on next call</span>
-        <button class="refresh-btn" onclick="location.reload()">&#8635; Refresh</button>
-      </div>
       <div class="section-label" style="margin-bottom:0.5rem">Camera</div>
       <button class="cam-toggle" id="cam-toggle-btn" onclick="toggleCameraFacing()">📷 Using Rear Camera</button>
       <div class="section-label" style="margin-bottom:0.5rem">Stream Quality</div>
@@ -219,7 +219,7 @@ const SB_URL    = 'https://qxxxlpdbfzlsgqnffqsg.supabase.co';
 const SB_KEY    = 'sb_publishable_6oiKJUELnMY6Q6OAtExsiw_gi3uZ_I9';
 const STREAM_CH = 'commbadge-stream';
 
-const RTC_CONFIG = { iceServers: [
+const RTC_CONFIG = { iceTransportPolicy: 'all', iceCandidatePoolSize: 10, iceServers: [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'turn:openrelay.metered.ca:80',   username:'openrelayproject', credential:'openrelayproject' },
@@ -337,29 +337,20 @@ async function flipCamera() {
 
 async function getLocalStream() {
   const {res,fps}=getQualitySettings();
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:selectedCamera==='rear'?'environment':'user', width:{ideal:res.w,max:res.w}, height:{ideal:res.h,max:res.h}, frameRate:{ideal:fps,max:fps} },
-    audio:{
-      echoCancellation:true,
-      noiseSuppression:true,
-      autoGainControl:true,
-      googNoiseSuppression:true,
-      googHighpassFilter:true,
-      sampleRate:16000
-    }
-  });
-  return stream;
-}
-
-// ── Audio routing fix ─────────────────────────────────────────
-async function restoreAudioOutput() {
+  const facing = selectedCamera==='rear' ? 'environment' : 'user';
+  let stream;
   try {
-    const rv = getEl('remote-video');
-    // Try to set sink to default (restores original audio routing)
-    if (rv.setSinkId) {
-      await rv.setSinkId('default');
-    }
-  } catch(err) {}
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ideal:facing}, width:{ideal:res.w,max:res.w}, height:{ideal:res.h,max:res.h}, frameRate:{ideal:fps,max:fps} },
+      audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true, googNoiseSuppression:true, googHighpassFilter:true, sampleRate:16000 }
+    });
+  } catch(e) {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{exact:facing} },
+      audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true, googNoiseSuppression:true, googHighpassFilter:true, sampleRate:16000 }
+    });
+  }
+  return stream;
 }
 
 // ── Supabase ──────────────────────────────────────────────────
@@ -527,8 +518,8 @@ async function createPC(initiator) {
       setStreamStatus('live','In call');
       applyBitrateLimit(peerConnection);
       getEl('no-stream-msg').style.display='none';
-      restoreAudioOutput();
       vibrate();
+      requestWakeLock();
     } else if(state==='disconnected'){
       setStreamStatus('connecting','Reconnecting…');
       tryIceRestart(peerConnection);
@@ -541,7 +532,6 @@ async function createPC(initiator) {
     const rv=getEl('remote-video');
     rv.srcObject=streams[0];
     rv.play().catch(()=>{});
-    restoreAudioOutput();
     getEl('no-stream-msg').style.display='none';
   };
 
@@ -590,6 +580,13 @@ function autoReconnect() {
 }
 
 // ── Chat ──────────────────────────────────────────────────────
+function dismissAudioPrompt() {
+  const rv=getEl('remote-video');
+  if(rv) rv.play().catch(()=>{});
+  const prompt=getEl('tap-audio-prompt');
+  if(prompt) prompt.style.display='none';
+}
+
 function setupDataChannel(dc) {
   dc.onopen=()=>{getEl('chat-send').disabled=false;getEl('chat-input').placeholder='Type a message…';};
   dc.onclose=()=>{getEl('chat-send').disabled=true;};
@@ -625,7 +622,9 @@ async function startCall() {
   catch(err){showToast('Camera/mic access denied');return;}
   inCall=true;isInitiator=true;isMuted=false;isCamHidden=false;
   remoteDescSet=false;pendingCandidates=[];negotiating=false;
-  const lv=getEl('local-video');lv.srcObject=localStream;lv.play().catch(()=>{});
+  const lv=getEl('local-video');lv.srcObject=localStream;
+  // Tight to user gesture for iOS autoplay compliance
+  lv.play().catch(()=>{});
   showCallUI();setStreamStatus('connecting','Waiting for other user…');
   await setSessionActive(true);
   await setupChannel();
@@ -650,9 +649,28 @@ function stopStream() {
   cleanup();setStreamStatus('','Call ended');
 }
 
+// ── Wake Lock ─────────────────────────────────────────────────
+let wakeLock = null;
+
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {}
+}
+
+async function releaseWakeLock() {
+  if (!wakeLock) return;
+  try { await wakeLock.release(); wakeLock = null; } catch(e) {}
+}
+
+// Re-acquire wake lock if released by system (e.g. tab hidden then shown)
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && inCall && !wakeLock) requestWakeLock();
+});
+
 function cleanup() {
   inCall=false;isInitiator=false;negotiating=false;
   remoteDescSet=false;pendingCandidates=[];
+  releaseWakeLock();
   stopAdaptiveBitrate();
   if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null;}
   reconnectAttempts=0;
@@ -759,6 +777,16 @@ async function checkForUpdate() {
 
 // ── Init ──────────────────────────────────────────────────────
 function init() {
+  // Show iOS non-Safari install tip
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isSafari = /safari/i.test(navigator.userAgent) && !/chrome|crios|fxios/i.test(navigator.userAgent);
+  if (isIOS && !isSafari && !localStorage.getItem('cb_ios_tip_dismissed')) {
+    getEl('ios-tip').style.display = 'block';
+    getEl('ios-tip').querySelector('button').addEventListener('click', () => {
+      localStorage.setItem('cb_ios_tip_dismissed', '1');
+    });
+  }
+
   // Restore camera preference
   selectedCamera = localStorage.getItem('cb_camera') || 'rear';
   getEl('cam-toggle-btn').textContent = selectedCamera==='rear' ? '📷 Using Rear Camera' : '🤳 Using Front Camera';
@@ -769,6 +797,18 @@ function init() {
 
 setInterval(pollPresence,15000);
 init();
+
+// Recover stream when app returns from background/lock screen
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible' || !inCall) return;
+  // Re-play video elements in case iOS paused them
+  try { const lv=getEl('local-video'); if(lv.srcObject) lv.play().catch(()=>{}); } catch(e) {}
+  try { const rv=getEl('remote-video'); if(rv.srcObject) rv.play().catch(()=>{}); } catch(e) {}
+  // If connection dropped while backgrounded, attempt reconnect
+  if (peerConnection && (peerConnection.connectionState==='disconnected'||peerConnection.connectionState==='failed')) {
+    tryIceRestart(peerConnection);
+  }
+});
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
