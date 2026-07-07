@@ -68,6 +68,10 @@
     .call-video-wrap video#remote-video { width: 100%; height: 100%; object-fit: cover; display: block; }
     .call-video-wrap video#local-video  { position: absolute; bottom: 8px; right: 8px; width: 26%; aspect-ratio: 16/9; object-fit: cover; border-radius: 4px; border: 2px solid rgba(255,255,255,0.2); background: #111; z-index: 2; }
     .call-video-wrap .no-stream { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: center; padding: 1rem; }
+    .flip-cam-btn { position: absolute; top: 8px; right: 8px; z-index: 4; width: 34px; height: 34px; border-radius: 50%; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.25); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; transition: background 0.15s, transform 0.1s; }
+    .flip-cam-btn:hover { background: rgba(0,0,0,0.7); }
+    .flip-cam-btn:active { transform: scale(0.92); }
+    .flip-cam-btn svg { width: 18px; height: 18px; }
 
     /* Chat */
     .chat-messages { min-height: 90px; max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-bottom: 4px; }
@@ -102,9 +106,6 @@
     .cam-toggle:hover { color: var(--text); border-color: var(--border2); }
 
     /* Sliders */
-    .quality-row { display: flex; align-items: center; gap: 10px; margin-bottom: 0.6rem; }
-    .quality-label { font-family: var(--mono); font-size: 11px; color: var(--muted); width: 68px; flex-shrink: 0; text-align: right; letter-spacing: 0.05em; text-transform: uppercase; }
-    .quality-val { font-family: var(--mono); font-size: 11px; color: var(--accent); width: 72px; flex-shrink: 0; }
     input[type="range"] { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; background: var(--surface2); border-radius: 999px; outline: none; border: 1px solid var(--border); cursor: pointer; }
     input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); cursor: pointer; }
     input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); cursor: pointer; }
@@ -151,6 +152,14 @@
       <video id="remote-video" autoplay playsinline></video>
       <video id="local-video"  autoplay muted playsinline></video>
       <div class="no-stream" id="no-stream-msg">Waiting for other user…</div>
+      <button class="flip-cam-btn" onclick="flipCamera()" aria-label="Switch camera" title="Switch camera">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M17 2.5 20.5 6 17 9.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M20.5 6H8a5.5 5.5 0 0 0-5.5 5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M7 21.5 3.5 18 7 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M3.5 18H16a5.5 5.5 0 0 0 5.5-5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
       <div id="tap-audio-prompt" style="display:none;position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.2);border-radius:999px;padding:6px 16px;font-family:var(--mono);font-size:11px;color:#fff;cursor:pointer;z-index:5;white-space:nowrap" onclick="dismissAudioPrompt()">▶ Tap to hear audio</div>
     </div>
   </div>
@@ -161,7 +170,6 @@
       <div class="ctrl-row">
         <button class="call-btn ctrl" id="btn-mute"    onclick="toggleMute()">🔊 Mute</button>
         <button class="call-btn warn" id="btn-cam"     onclick="toggleCamera()">📷 Hide Cam</button>
-        <button class="call-btn ctrl" id="btn-flipcam" onclick="flipCamera()">🔄 Flip</button>
       </div>
       <button class="call-btn danger" onclick="stopStream()">&#9632; End Call</button>
     </div>
@@ -186,32 +194,9 @@
     <div class="settings-body" id="settings-body">
       <div class="section-label" style="margin-bottom:0.5rem">Camera</div>
       <button class="cam-toggle" id="cam-toggle-btn" onclick="toggleCameraFacing()">📷 Using Rear Camera</button>
-      <div class="section-label" style="margin-bottom:0.5rem">Stream Quality</div>
-      <div class="quality-row">
-        <span class="quality-label">Resolution</span>
-        <input type="range" id="sl-res" min="0" max="3" step="1" value="1" oninput="updateSliders()">
-        <span class="quality-val" id="lbl-res">480×360</span>
-      </div>
-      <div class="quality-row">
-        <span class="quality-label">Frame Rate</span>
-        <input type="range" id="sl-fps" min="0" max="4" step="1" value="1" oninput="updateSliders()">
-        <span class="quality-val" id="lbl-fps">15 fps</span>
-      </div>
-      <div class="quality-row" style="margin-bottom:1rem">
-        <span class="quality-label">Bitrate</span>
-        <input type="range" id="sl-bps" min="0" max="4" step="1" value="2" oninput="updateSliders()">
-        <span class="quality-val" id="lbl-bps">400 kbps</span>
-      </div>
       <div class="section-label" style="margin-bottom:0.5rem">App Update</div>
       <button class="call-btn blue" style="padding:10px" onclick="checkForUpdate()">&#8635; Check for Update</button>
-      <div class="section-label" style="margin-top:1rem;margin-bottom:0.4rem">Changelog</div>
-      <div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7">
-        <div style="color:var(--accent);margin-bottom:1px">v1.04</div>
-        <div style="margin-bottom:0.6rem">Fixed tap-to-hear-audio prompt — now actually appears when iOS blocks remote audio autoplay, instead of failing silently. Prompt also re-appears if audio is re-blocked after returning from background, and clears properly when a call ends.</div>
-        <div style="color:var(--accent);margin-bottom:1px">v1.03</div>
-        <div>Wake Lock keeps screen on during calls, re-acquired automatically if released by the system. Camera facingMode now falls back from ideal to exact constraint if the requested camera is unavailable. Video recovers and reconnects automatically when returning from background.</div>
-      </div>
-      <div style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v1.04</div>
+      <div style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v1.07</div>
     </div>
   </div>
 
@@ -234,42 +219,11 @@ const RTC_CONFIG = { iceTransportPolicy: 'all', iceCandidatePoolSize: 10, iceSer
   { urls: 'turns:openrelay.metered.ca:443', username:'openrelayproject', credential:'openrelayproject' },
 ]};
 
-// ── Quality options ───────────────────────────────────────────
-const RES_OPTIONS = [
-  { label:'320×240',  w:320,  h:240  },
-  { label:'480×360',  w:480,  h:360  },
-  { label:'640×480',  w:640,  h:480  },
-  { label:'1280×720', w:1280, h:720  },
-];
-const FPS_OPTIONS = [8, 15, 24, 30, 60];
-const BPS_OPTIONS = [
-  { label:'100 kbps', bps:100000  },
-  { label:'200 kbps', bps:200000  },
-  { label:'400 kbps', bps:400000  },
-  { label:'800 kbps', bps:800000  },
-  { label:'1.5 Mbps', bps:1500000 },
-];
-
-function getQualitySettings() {
-  const ri=parseInt(localStorage.getItem('cb_sl_res')?? '1');
-  const fi=parseInt(localStorage.getItem('cb_sl_fps')?? '1');
-  const bi=parseInt(localStorage.getItem('cb_sl_bps')?? '2');
-  return { res:RES_OPTIONS[Math.min(ri,3)], fps:FPS_OPTIONS[Math.min(fi,4)], bps:BPS_OPTIONS[Math.min(bi,4)] };
-}
-
-function updateSliders() {
-  const ri=parseInt(getEl('sl-res').value), fi=parseInt(getEl('sl-fps').value), bi=parseInt(getEl('sl-bps').value);
-  getEl('lbl-res').textContent = RES_OPTIONS[ri].label;
-  getEl('lbl-fps').textContent = FPS_OPTIONS[fi]+' fps';
-  getEl('lbl-bps').textContent = BPS_OPTIONS[bi].label;
-  localStorage.setItem('cb_sl_res',ri); localStorage.setItem('cb_sl_fps',fi); localStorage.setItem('cb_sl_bps',bi);
-}
-
-function initSliders() {
-  const ri=parseInt(localStorage.getItem('cb_sl_res')??'1'), fi=parseInt(localStorage.getItem('cb_sl_fps')??'1'), bi=parseInt(localStorage.getItem('cb_sl_bps')??'2');
-  getEl('sl-res').value=ri; getEl('sl-fps').value=fi; getEl('sl-bps').value=bi;
-  updateSliders();
-}
+// ── Bitrate ceiling ───────────────────────────────────────────
+// Fixed cap for the automatic network-adaptive bitrate logic below.
+// Not user-configurable; the adaptive loop scales down/up from here
+// based on real-time packet loss / RTT.
+const MAX_BITRATE_BPS = 1500000;
 
 function toggleSettings() {
   const body=getEl('settings-body'), arrow=getEl('settings-arrow');
@@ -282,7 +236,7 @@ function toggleSettings() {
 let supabaseClient=null, rtcChannel=null, peerConnection=null, localStream=null;
 let inCall=false, isInitiator=false, isMuted=false, isCamHidden=false;
 let dataChannel=null, pendingCandidates=[], remoteDescSet=false, negotiating=false;
-let adaptiveTimer=null, keyframeTimer=null, lastPacketsLost=0, lastPacketsSent=0, currentMaxBitrate=200000;
+let adaptiveTimer=null, keyframeTimer=null, lastPacketsLost=0, lastPacketsSent=0, currentMaxBitrate=1500000;
 let reconnectTimer=null, reconnectAttempts=0;
 let selectedCamera='rear';
 
@@ -343,12 +297,11 @@ async function flipCamera() {
 }
 
 async function getLocalStream() {
-  const {res,fps}=getQualitySettings();
   const facing = selectedCamera==='rear' ? 'environment' : 'user';
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:{ideal:facing}, width:{ideal:res.w,max:res.w}, height:{ideal:res.h,max:res.h}, frameRate:{ideal:fps,max:fps} },
+      video:{ facingMode:{ideal:facing} },
       audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true, googNoiseSuppression:true, googHighpassFilter:true, sampleRate:16000 }
     });
   } catch(e) {
@@ -400,19 +353,19 @@ function constrainSDP(sdp) {
   for(const l of lines){const m=l.match(/a=rtpmap:(\d+) VP8\/90000/);if(m){vp8=m[1];break;}}
   let result=sdp;
   if(vp8) result=result.replace(/m=video (\d+) [A-Z/]+ ([\d ]+)/,(match,port,pays)=>`m=video ${port} UDP/TLS/RTP/SAVPF ${vp8} ${pays.split(' ').filter(p=>p!==vp8).join(' ')}`);
-  const kbps=Math.round(getQualitySettings().bps.bps/1000);
+  const kbps=Math.round(MAX_BITRATE_BPS/1000);
   result=result.replace(/(m=video [^\r\n]+\r\n)/g,`$1b=AS:${kbps}\r\n`);
   return result;
 }
 
 async function applyBitrateLimit(pc) {
-  const {bps,fps}=getQualitySettings(); currentMaxBitrate=bps.bps;
+  currentMaxBitrate=MAX_BITRATE_BPS;
   for(const sender of pc.getSenders()){
     if(!sender.track) continue;
     try{
       const params=sender.getParameters();
       if(!params.encodings?.length) params.encodings=[{}];
-      if(sender.track.kind==='video'){params.encodings[0].maxBitrate=bps.bps;params.encodings[0].maxFramerate=fps;}
+      if(sender.track.kind==='video'){params.encodings[0].maxBitrate=MAX_BITRATE_BPS;}
       await sender.setParameters(params);
     }catch(e){}
   }
@@ -434,7 +387,7 @@ function startAdaptiveBitrate(pc) {
       const lr=sd>0?ld/sd:0;
       let nb=currentMaxBitrate;
       if(lr>0.05||rtt>0.3){nb=Math.max(50000,Math.floor(currentMaxBitrate*0.75));updateQualityIndicator('poor');}
-      else if(lr<0.01&&rtt<0.15){const ceil=getQualitySettings().bps.bps;nb=Math.min(ceil,Math.floor(currentMaxBitrate*1.1));updateQualityIndicator('good');}
+      else if(lr<0.01&&rtt<0.15){nb=Math.min(MAX_BITRATE_BPS,Math.floor(currentMaxBitrate*1.1));updateQualityIndicator('good');}
       else updateQualityIndicator(lr<0.03?'good':'fair');
       if(nb!==currentMaxBitrate){
         currentMaxBitrate=nb;
@@ -450,7 +403,7 @@ function startAdaptiveBitrate(pc) {
 function stopAdaptiveBitrate() {
   if(adaptiveTimer){clearInterval(adaptiveTimer);adaptiveTimer=null;}
   if(keyframeTimer){clearInterval(keyframeTimer);keyframeTimer=null;}
-  currentMaxBitrate=200000;lastPacketsLost=0;lastPacketsSent=0;
+  currentMaxBitrate=MAX_BITRATE_BPS;lastPacketsLost=0;lastPacketsSent=0;
 }
 
 function startKeyframeInterval(pc) {
@@ -813,7 +766,6 @@ function init() {
   // Restore camera preference
   selectedCamera = localStorage.getItem('cb_camera') || 'rear';
   getEl('cam-toggle-btn').textContent = selectedCamera==='rear' ? '📷 Using Rear Camera' : '🤳 Using Front Camera';
-  initSliders();
   initSB();
   pollPresence();
 }
