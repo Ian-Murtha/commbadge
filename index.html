@@ -59,8 +59,6 @@
     .call-btn.ctrl   { background: var(--surface2);   border-color: var(--border2);       color: var(--muted); }
     .call-btn.ctrl:hover:not(:disabled)   { color: var(--text); }
     .call-btn.warn   { background: var(--warn-dim);   border-color: var(--warn-border);   color: var(--warn); }
-
-
     /* Video */
     .call-video-wrap { position: relative; background: #000; border-radius: var(--r-sm); overflow: hidden; aspect-ratio: 16/9; border: 1px solid var(--border); }
     .call-video-wrap video#remote-video { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -93,23 +91,6 @@
     .busy-icon { font-size: 40px; margin-bottom: 0.75rem; }
     .busy-text { font-family: var(--mono); font-size: 13px; color: var(--muted); line-height: 1.8; }
 
-    /* Settings collapsible */
-    .settings-toggle { width: 100%; padding: 10px; background: transparent; border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--muted); font-family: var(--mono); font-size: 12px; cursor: pointer; transition: color 0.15s, border-color 0.15s; display: flex; align-items: center; justify-content: space-between; }
-    .settings-toggle:hover { color: var(--text); border-color: var(--border2); }
-    .settings-arrow { transition: transform 0.2s; display: inline-block; }
-    .settings-arrow.open { transform: rotate(180deg); }
-    .settings-body { display: none; padding-top: 1rem; }
-    .settings-body.open { display: block; }
-
-    /* Camera toggle */
-    .cam-toggle { width: 100%; padding: 9px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface2); color: var(--muted); font-family: var(--mono); font-size: 12px; cursor: pointer; transition: all 0.15s; margin-bottom: 0.875rem; }
-    .cam-toggle:hover { color: var(--text); border-color: var(--border2); }
-
-    /* Sliders */
-    input[type="range"] { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; background: var(--surface2); border-radius: 999px; outline: none; border: 1px solid var(--border); cursor: pointer; }
-    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); cursor: pointer; }
-    input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); cursor: pointer; }
-
     /* Toast */
     .toast { position: fixed; bottom: calc(1.5rem + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%) translateY(10px); background: var(--surface2); border: 1px solid var(--border2); border-radius: 999px; padding: 9px 20px; font-family: var(--mono); font-size: 12px; color: var(--text); opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; white-space: nowrap; z-index: 400; }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -134,6 +115,8 @@
   <!-- Start / Join button (always visible when not in call) -->
   <div id="card-action">
     <button class="call-btn green" id="btn-start" onclick="startCall()">&#9679; Start Call</button>
+    <button class="call-btn blue" style="margin-top:0.75rem;padding:10px" onclick="checkForUpdate()">&#8635; Check for Update</button>
+    <div style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v1.09</div>
   </div>
 
   <!-- Busy screen -->
@@ -155,7 +138,7 @@
       <div class="video-controls-tr">
         <button class="video-icon-btn" id="btn-mute" onclick="toggleMute()" aria-label="Mute microphone" title="Mute microphone">
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path id="mic-body" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M6 11a6 6 0 0 0 12 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M12 17v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <line id="mic-slash" x1="4" y1="4" x2="20" y2="20" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"/>
@@ -163,7 +146,7 @@
         </button>
         <button class="video-icon-btn" id="btn-cam" onclick="toggleCamera()" aria-label="Hide camera" title="Hide camera">
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path id="cam-body" d="M3 7.5a1.5 1.5 0 0 1 1.5-1.5H14a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 14 18H4.5A1.5 1.5 0 0 1 3 16.5v-9Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M3 7.5a1.5 1.5 0 0 1 1.5-1.5H14a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 14 18H4.5A1.5 1.5 0 0 1 3 16.5v-9Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
             <path d="M15.5 10.3 20 7.8v8.4l-4.5-2.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <line id="cam-slash" x1="4" y1="4" x2="20" y2="20" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"/>
           </svg>
@@ -198,28 +181,14 @@
     </div>
   </div>
 
-  <!-- Settings (collapsible, always at bottom) -->
-  <div id="card-settings">
-    <button class="settings-toggle" onclick="toggleSettings()">
-      <span>&#9881; Settings</span>
-      <span class="settings-arrow" id="settings-arrow">&#9660;</span>
-    </button>
-    <div class="settings-body" id="settings-body">
-      <div class="section-label" style="margin-bottom:0.5rem">Camera</div>
-      <button class="cam-toggle" id="cam-toggle-btn" onclick="toggleCameraFacing()">📷 Using Rear Camera</button>
-      <div class="section-label" style="margin-bottom:0.5rem">App Update</div>
-      <button class="call-btn blue" style="padding:10px" onclick="checkForUpdate()">&#8635; Check for Update</button>
-      <div style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v1.08</div>
-    </div>
-  </div>
 
 </main>
 <div class="toast" id="toast"></div>
 
 <script>
 // ── Config ────────────────────────────────────────────────────
-// Signalling uses a dedicated Supabase project, separate from the main
-// MurDough Matrix database, keeping primary data credentials private.
+// Signalling uses a dedicated Supabase project, kept separate to
+// isolate credentials from other systems.
 const SB_URL    = 'https://qxxxlpdbfzlsgqnffqsg.supabase.co';
 const SB_KEY    = 'sb_publishable_6oiKJUELnMY6Q6OAtExsiw_gi3uZ_I9';
 const STREAM_CH = 'commbadge-stream';
@@ -238,20 +207,13 @@ const RTC_CONFIG = { iceTransportPolicy: 'all', iceCandidatePoolSize: 10, iceSer
 // based on real-time packet loss / RTT.
 const MAX_BITRATE_BPS = 1500000;
 
-function toggleSettings() {
-  const body=getEl('settings-body'), arrow=getEl('settings-arrow');
-  const isOpen=body.classList.contains('open');
-  body.classList.toggle('open',!isOpen);
-  arrow.classList.toggle('open',!isOpen);
-}
-
 // ── State ─────────────────────────────────────────────────────
 let supabaseClient=null, rtcChannel=null, peerConnection=null, localStream=null;
 let inCall=false, isInitiator=false, isMuted=false, isCamHidden=false;
 let dataChannel=null, pendingCandidates=[], remoteDescSet=false, negotiating=false;
 let adaptiveTimer=null, keyframeTimer=null, lastPacketsLost=0, lastPacketsSent=0, currentMaxBitrate=1500000;
 let reconnectTimer=null, reconnectAttempts=0;
-let selectedCamera='rear';
+let cameraFacing='rear';
 
 // ── Helpers ───────────────────────────────────────────────────
 const getEl = id => document.getElementById(id);
@@ -280,19 +242,13 @@ function setStreamStatus(state, msg) {
 }
 
 // ── Camera toggle ─────────────────────────────────────────────
-function toggleCameraFacing() {
-  selectedCamera = selectedCamera==='rear' ? 'front' : 'rear';
-  localStorage.setItem('cb_camera', selectedCamera);
-  getEl('cam-toggle-btn').textContent = selectedCamera==='rear' ? '📷 Using Rear Camera' : '🤳 Using Front Camera';
-}
-
 // Flip camera mid-call by replacing video track
 async function flipCamera() {
   if (!localStream) return;
-  selectedCamera = selectedCamera==='rear' ? 'front' : 'rear';
+  cameraFacing = cameraFacing==='rear' ? 'front' : 'rear';
   try {
     const newStream = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:selectedCamera==='rear'?'environment':'user' },
+      video:{ facingMode:cameraFacing==='rear'?'environment':'user' },
       audio:false
     });
     const newTrack = newStream.getVideoTracks()[0];
@@ -310,20 +266,11 @@ async function flipCamera() {
 }
 
 async function getLocalStream() {
-  const facing = selectedCamera==='rear' ? 'environment' : 'user';
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:{ideal:facing} },
-      audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true, googNoiseSuppression:true, googHighpassFilter:true, sampleRate:16000 }
-    });
-  } catch(e) {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:{exact:facing} },
-      audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true, googNoiseSuppression:true, googHighpassFilter:true, sampleRate:16000 }
-    });
-  }
-  return stream;
+  const facing = cameraFacing==='rear' ? 'environment' : 'user';
+  return navigator.mediaDevices.getUserMedia({
+    video:{ facingMode:{ideal:facing} },
+    audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true, googNoiseSuppression:true, googHighpassFilter:true, sampleRate:16000 }
+  });
 }
 
 // Audio routing fix — attempts to restore default audio output
@@ -487,7 +434,6 @@ function setupChannel() {
 
 async function createPC(initiator) {
   peerConnection=new RTCPeerConnection(RTC_CONFIG);
-  window._debugPC=peerConnection;
 
   peerConnection.onicecandidate=({candidate})=>{
     if(candidate&&rtcChannel) rtcChannel.send({type:'broadcast',event:'ice-candidate',payload:{candidate}});
@@ -711,7 +657,6 @@ function showIdleUI() {
   getEl('card-busy').style.display='none';
   getEl('card-video').style.display='none';
   getEl('card-controls').style.display='none';
-  getEl('card-settings').style.display='block';
   const btn=getEl('btn-start');
   btn.textContent='⬤ Start Call';
   btn.className='call-btn green';
@@ -723,7 +668,6 @@ function showBusy() {
   getEl('card-busy').style.display='block';
   getEl('card-video').style.display='none';
   getEl('card-controls').style.display='none';
-  getEl('card-settings').style.display='none';
   setStreamStatus('','Call in progress');
 }
 
@@ -732,7 +676,6 @@ function showJoinOption() {
   getEl('card-busy').style.display='none';
   getEl('card-video').style.display='none';
   getEl('card-controls').style.display='none';
-  getEl('card-settings').style.display='block';
   const btn=getEl('btn-start');
   btn.textContent='📞 Join Call';
   btn.className='call-btn blue';
@@ -745,7 +688,6 @@ function showCallUI() {
   getEl('card-busy').style.display='none';
   getEl('card-video').style.display='block';
   getEl('card-controls').style.display='block';
-  getEl('card-settings').style.display='none';
 }
 
 // ── Poll presence ─────────────────────────────────────────────
@@ -781,9 +723,6 @@ function init() {
     });
   }
 
-  // Restore camera preference
-  selectedCamera = localStorage.getItem('cb_camera') || 'rear';
-  getEl('cam-toggle-btn').textContent = selectedCamera==='rear' ? '📷 Using Rear Camera' : '🤳 Using Front Camera';
   initSB();
   pollPresence();
 }
