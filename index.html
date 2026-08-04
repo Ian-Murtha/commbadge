@@ -116,7 +116,7 @@
   <div id="card-action">
     <button class="call-btn green" id="btn-start" onclick="startCall()">&#9679; Start Call</button>
     <button class="call-btn blue" style="margin-top:0.75rem;padding:10px" onclick="checkForUpdate()">&#8635; Check for Update</button>
-    <div style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v1.09</div>
+    <div style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v1.10</div>
   </div>
 
   <!-- Busy screen -->
@@ -189,8 +189,8 @@
 // ── Config ────────────────────────────────────────────────────
 // Signalling uses a dedicated Supabase project, kept separate to
 // isolate credentials from other systems.
-const SB_URL    = 'https://qxxxlpdbfzlsgqnffqsg.supabase.co';
-const SB_KEY    = 'sb_publishable_6oiKJUELnMY6Q6OAtExsiw_gi3uZ_I9';
+const SB_URL    = 'https://bwazurshtrpqzatmkdkj.supabase.co';
+const SB_KEY    = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ3YXp1cnNodHJwcXphdG1rZGtqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MjMwMTMsImV4cCI6MjA5NTQ5OTAxM30.GLp4TEQ8geyczhNXzH8ZX3QcnAq32GntTgitXWcagdY';
 const STREAM_CH = 'commbadge-stream';
 
 const RTC_CONFIG = { iceTransportPolicy: 'all', iceCandidatePoolSize: 10, iceServers: [
@@ -295,14 +295,14 @@ async function sbFetch(path, opts={}) {
 
 async function setSessionActive(active) {
   try {
-    const rows=await sbFetch('stream_session?order=id.asc&limit=1');
-    if(rows&&rows.length) await sbFetch(`stream_session?id=eq.${rows[0].id}`,{method:'PATCH',prefer:'return=minimal',body:JSON.stringify({active,updated_at:new Date().toISOString()})});
+    const rows=await sbFetch('commbadge_stream_session?order=id.asc&limit=1');
+    if(rows&&rows.length) await sbFetch(`commbadge_stream_session?id=eq.${rows[0].id}`,{method:'PATCH',prefer:'return=minimal',body:JSON.stringify({active,updated_at:new Date().toISOString()})});
   } catch(err){}
 }
 
 async function checkSessionActive() {
   try {
-    const rows=await sbFetch('stream_session?order=id.asc&limit=1');
+    const rows=await sbFetch('commbadge_stream_session?order=id.asc&limit=1');
     return rows&&rows.length&&rows[0].active===true;
   } catch(err){return false;}
 }
