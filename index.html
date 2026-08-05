@@ -31,6 +31,9 @@
     }
     html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
     body { display: flex; flex-direction: column; min-height: 100dvh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+    body.embed-mode { background: transparent; min-height: 0; padding: 0; }
+    body.embed-mode main { padding: 0; max-width: none; }
+    .embed-hide { display: none !important; }
 
     main { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.875rem; max-width: 480px; margin: 0 auto; width: 100%; }
 
@@ -100,7 +103,7 @@
 <main>
 
   <!-- iOS non-Safari install tip -->
-  <div id="ios-tip" style="display:none;background:var(--blue-dim);border:1px solid var(--blue-border);border-radius:var(--r-sm);padding:0.6rem 0.875rem;font-family:var(--mono);font-size:11px;color:var(--blue);line-height:1.6">
+  <div id="ios-tip" class="embed-hide" style="display:none;background:var(--blue-dim);border:1px solid var(--blue-border);border-radius:var(--r-sm);padding:0.6rem 0.875rem;font-family:var(--mono);font-size:11px;color:var(--blue);line-height:1.6">
     &#9432; To install this app on iPhone, open in <strong>Safari</strong> and tap Share → Add to Home Screen.
     <button onclick="this.parentElement.style.display='none'" style="float:right;background:transparent;border:none;color:var(--blue);cursor:pointer;font-size:13px;margin-left:8px">✕</button>
   </div>
@@ -115,8 +118,8 @@
   <!-- Start / Join button (always visible when not in call) -->
   <div id="card-action">
     <button class="call-btn green" id="btn-start" onclick="startCall()">&#9679; Start Call</button>
-    <button class="call-btn blue" style="margin-top:0.75rem;padding:10px" onclick="checkForUpdate()">&#8635; Check for Update</button>
-    <div style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v1.10</div>
+    <button class="call-btn blue embed-hide" id="btn-check-update" style="margin-top:0.75rem;padding:10px" onclick="checkForUpdate()">&#8635; Check for Update</button>
+    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v1.11</div>
   </div>
 
   <!-- Busy screen -->
@@ -710,6 +713,47 @@ async function checkForUpdate() {
     window.location.reload(true);
   } catch (err) { window.location.reload(true); }
 }
+
+// ── Embed mode (for hosting inside an iframe, e.g. MMX) ────────
+const EMBED_MODE = new URLSearchParams(window.location.search).get('embed') === '1';
+if (EMBED_MODE) document.body.classList.add('embed-mode');
+
+// Accept small settings sync from a parent frame (e.g. selected camera).
+// Parent sends: { source:'commbadge-host', type:'settings', selectedCamera:'front'|'rear' }
+window.addEventListener('message', (e) => {
+  const data = e.data;
+  if (!data || data.source !== 'commbadge-host') return;
+  if (data.type === 'settings' && data.selectedCamera) {
+    try { localStorage.setItem('cb_camera', data.selectedCamera); } catch(err) {}
+  }
+  // Explicit auto-end signal from parent (e.g. host-level activity timeout).
+  // Calls otherwise persist across the host's internal tab switches by design.
+  if (data.type === 'end-call' && inCall) {
+    stopStream();
+  }
+});
+
+// ── Visibility-based inactivity timeout ─────────────────────────
+// Safety net: if this page (or the iframe it's embedded in) is hidden while
+// a call is active for longer than the threshold, auto-end the call rather
+// than let it silently run in the background indefinitely.
+const BACKGROUND_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+let backgroundedSince = null;
+let backgroundTimeoutTimer = null;
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    if (inCall) {
+      backgroundedSince = Date.now();
+      backgroundTimeoutTimer = setTimeout(() => {
+        if (inCall) { stopStream(); }
+      }, BACKGROUND_TIMEOUT_MS);
+    }
+  } else {
+    if (backgroundTimeoutTimer) { clearTimeout(backgroundTimeoutTimer); backgroundTimeoutTimer = null; }
+    backgroundedSince = null;
+  }
+});
 
 // ── Init ──────────────────────────────────────────────────────
 function init() {
