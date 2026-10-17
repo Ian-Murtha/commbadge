@@ -93,7 +93,7 @@
   <!-- Connect button (shown when not in a call) -->
   <div id="card-action">
     <button class="call-btn green" id="btn-connect" onclick="connect()">&#9679; Connect</button>
-    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.0.3</div>
+    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.0.4</div>
   </div>
 
   <!-- Video -->
@@ -160,11 +160,23 @@ const STUN_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:st
 let supabaseClient = null, channel = null, pc = null, localStream = null;
 let iceServers = STUN_SERVERS, peerId = null, pendingCandidates = [];
 let active = false, isMuted = false, isCamHidden = false, cameraFacing = 'rear';
-const dbg = { relay: 'not loaded', h: 0, s: 0, r: 0, err: '', ice: '-', conn: '-', rx: 0, rxErr: '', role: '' };
+const dbg = { relay: 'not loaded', h: 0, s: 0, r: 0, err: '', ice: '-', conn: '-', rx: 0, rxErr: '', role: '', pairs: '' };
 function renderDbg() {
   const d = getEl('dbg'); if (!d) return;
   d.style.display = active ? 'block' : 'none';
-  d.textContent = 'relay: ' + dbg.relay + ' | candidates host ' + dbg.h + ' stun ' + dbg.s + ' relay ' + dbg.r + ' | remote cand ' + dbg.rx + (dbg.rxErr ? ' (' + dbg.rxErr + ')' : '') + ' | ' + dbg.role + ' | ice ' + dbg.ice + ' | conn ' + dbg.conn + (dbg.err ? ' | ' + dbg.err : '');
+  d.textContent = 'relay: ' + dbg.relay + ' | candidates host ' + dbg.h + ' stun ' + dbg.s + ' relay ' + dbg.r + ' | remote cand ' + dbg.rx + (dbg.rxErr ? ' (' + dbg.rxErr + ')' : '') + ' | ' + dbg.role + ' | ice ' + dbg.ice + (dbg.pairs ? ' | ' + dbg.pairs : '') + ' | conn ' + dbg.conn + (dbg.err ? ' | ' + dbg.err : '');
+}
+let statsTimer = null;
+async function pollStats(mine) {
+  try {
+    const rep = await mine.getStats(); const pair = { }, rem = { }; let n = 0;
+    rep.forEach(r => {
+      if (r.type === 'candidate-pair') { n++; pair[r.state] = (pair[r.state] || 0) + 1; }
+      if (r.type === 'remote-candidate') rem[r.candidateType] = (rem[r.candidateType] || 0) + 1;
+    });
+    dbg.pairs = 'pairs ' + n + ' ' + JSON.stringify(pair) + ' remote ' + JSON.stringify(rem);
+    renderDbg();
+  } catch (e) {}
 }
 let watchdog = null, lostTimer = null, retryTimer = null, hiddenTimer = null, wakeLock = null;
 
@@ -368,7 +380,7 @@ function onPresence() {
 
 function makePC() {
   closePC();
-  const mine = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 10 });
+  const mine = new RTCPeerConnection({ iceServers });
   pc = mine; pendingCandidates = [];
   dbg.h = dbg.s = dbg.r = 0; dbg.rx = 0; dbg.rxErr = ''; dbg.role = iAmCaller() ? 'caller' : 'answerer'; dbg.err = ''; dbg.ice = 'new'; dbg.conn = 'new'; renderDbg();
   localStream.getTracks().forEach(t => mine.addTrack(t, localStream));
@@ -405,11 +417,12 @@ function makePC() {
       lostTimer = setTimeout(() => { if (pc === mine && mine.connectionState !== 'connected') recover(); }, 8000);
     } else if (s === 'failed') recover();
   };
+  clearInterval(statsTimer); statsTimer = setInterval(() => { if (pc === mine) pollStats(mine); }, 2000);
   watchdog = setTimeout(() => { if (pc === mine && mine.connectionState !== 'connected') recover(); }, 20000);
 }
 
 function closePC() {
-  clearTimeout(watchdog); clearTimeout(lostTimer); clearTimeout(retryTimer);
+  clearTimeout(watchdog); clearTimeout(lostTimer); clearTimeout(retryTimer); clearInterval(statsTimer);
   const old = pc; pc = null; pendingCandidates = [];
   if (old) { old.onicecandidate = old.onicecandidateerror = old.oniceconnectionstatechange = old.ontrack = old.onconnectionstatechange = null; try { old.close(); } catch (e) {} }
   getEl('remote-video').srcObject = null;
