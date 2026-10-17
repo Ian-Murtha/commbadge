@@ -71,6 +71,7 @@
     .video-icon-btn:hover { background: rgba(0,0,0,0.7); }
     .video-icon-btn:active { transform: scale(0.92); }
     .video-icon-btn svg { width: 18px; height: 18px; }
+    .video-icon-btn:disabled { opacity: 0.3; cursor: default; }
     .video-icon-btn.active { background: var(--warn); border-color: var(--warn); color: #2a2210; }
 
 
@@ -92,7 +93,7 @@
   <!-- Connect button (shown when not in a call) -->
   <div id="card-action">
     <button class="call-btn green" id="btn-connect" onclick="connect()">&#9679; Connect</button>
-    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.0</div>
+    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.0.1</div>
   </div>
 
   <!-- Video -->
@@ -117,7 +118,7 @@
             <line id="cam-slash" x1="4" y1="4" x2="20" y2="20" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"/>
           </svg>
         </button>
-        <button class="video-icon-btn" onclick="flipCamera()" aria-label="Switch camera" title="Switch camera">
+        <button class="video-icon-btn" id="btn-flip" onclick="flipCamera()" aria-label="Switch camera" title="Switch camera">
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M17 2.5 20.5 6 17 9.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M20.5 6H8a5.5 5.5 0 0 0-5.5 5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -191,17 +192,52 @@ function showCall() {
 }
 
 // ── Camera & mic ──────────────────────────────────────────────
+// Ask for camera + mic. If one is missing or busy, carry on with whatever works; if neither
+// works, still connect so you can see and hear the other person. Only a blocked permission stops it.
 async function getLocalStream() {
-  const facing = cameraFacing === 'rear' ? 'environment' : 'user';
-  return navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: facing } },
-    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-  });
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    const e = new Error('unsupported'); e.name = 'Unsupported'; throw e;
+  }
+  const video = { facingMode: { ideal: cameraFacing === 'rear' ? 'environment' : 'user' } };
+  const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+  const attempts = [
+    { constraints: { video, audio }, note: '' },
+    { constraints: { video: false, audio }, note: 'No camera available — audio only' },
+    { constraints: { video, audio: false }, note: 'No microphone available — video only' }
+  ];
+  for (const a of attempts) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(a.constraints);
+      if (a.note) showToast(a.note);
+      return stream;
+    } catch (err) {
+      if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) throw err;
+    }
+  }
+  showToast('No camera or mic available — you can still see and hear the other person');
+  return new MediaStream();
+}
+
+function describeMediaError(err) {
+  const n = err && err.name;
+  if (n === 'NotAllowedError' || n === 'SecurityError') return 'Camera/mic blocked — allow access in the browser address bar';
+  if (n === 'Unsupported') return 'This browser cannot use the camera here (needs https)';
+  return 'Could not start camera/mic' + (n ? ' (' + n + ')' : '');
+}
+
+// Grey out controls that don't apply to what we actually have
+function syncControls() {
+  const hasA = !!(localStream && localStream.getAudioTracks().length);
+  const hasV = !!(localStream && localStream.getVideoTracks().length);
+  getEl('btn-mute').disabled = !hasA;
+  getEl('btn-cam').disabled = !hasV;
+  getEl('btn-flip').disabled = !hasV;
+  getEl('local-video').style.display = hasV ? '' : 'none';
 }
 
 // Flip camera mid-call by replacing the video track
 async function flipCamera() {
-  if (!localStream) return;
+  if (!localStream || !localStream.getVideoTracks().length) return;
   const next = cameraFacing === 'rear' ? 'front' : 'rear';
   try {
     const newStream = await navigator.mediaDevices.getUserMedia({
@@ -283,9 +319,9 @@ async function connect() {
   getEl('btn-connect').disabled = true;
   setStatus('connecting', 'Starting camera…');
   try { localStream = await getLocalStream(); }
-  catch (err) { active = false; getEl('btn-connect').disabled = false; setStatus('', 'Ready'); showToast('Camera/mic access denied'); return; }
+  catch (err) { active = false; getEl('btn-connect').disabled = false; setStatus('', 'Ready'); showToast(describeMediaError(err)); return; }
   const lv = getEl('local-video'); lv.srcObject = localStream; lv.play().catch(() => {});
-  showCall(); requestWakeLock();
+  syncControls(); showCall(); requestWakeLock();
   setStatus('connecting', 'Waiting for the other person…');
   iceServers = await loadIceServers();
   if (!active) return;                                        // ended while loading
@@ -325,6 +361,10 @@ function makePC() {
   const mine = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 10 });
   pc = mine; pendingCandidates = [];
   localStream.getTracks().forEach(t => mine.addTrack(t, localStream));
+  // Anything we can't send, we can still receive
+  ['audio', 'video'].forEach(kind => {
+    if (!localStream.getTracks().some(t => t.kind === kind)) mine.addTransceiver(kind, { direction: 'recvonly' });
+  });
   mine.onicecandidate = ({ candidate }) => { if (candidate && pc === mine) send({ kind: 'candidate', candidate }); };
   mine.ontrack = ({ streams, track }) => {
     if (pc !== mine) return;
@@ -436,6 +476,8 @@ function cleanup(msg) {
   bc.classList.remove('active'); bc.title = 'Hide camera';
   getEl('mic-slash').style.display = 'none'; getEl('cam-slash').style.display = 'none';
   getEl('btn-connect').disabled = false;
+  ['btn-mute', 'btn-cam', 'btn-flip'].forEach(id => { getEl(id).disabled = false; });
+  lv.style.display = '';
   showIdle(); setStatus('', msg || 'Ready');
 }
 
