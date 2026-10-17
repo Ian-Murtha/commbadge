@@ -93,7 +93,7 @@
   <!-- Connect button (shown when not in a call) -->
   <div id="card-action">
     <button class="call-btn green" id="btn-connect" onclick="connect()">&#9679; Connect</button>
-    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.0.1</div>
+    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.0.2</div>
   </div>
 
   <!-- Video -->
@@ -130,6 +130,8 @@
     </div>
   </div>
 
+  <div id="dbg" style="display:none;text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted);padding:0.4rem 0.5rem;word-break:break-word"></div>
+
   <!-- End call -->
   <div id="card-controls" style="display:none">
     <div class="card">
@@ -158,6 +160,12 @@ const STUN_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:st
 let supabaseClient = null, channel = null, pc = null, localStream = null;
 let iceServers = STUN_SERVERS, peerId = null, pendingCandidates = [];
 let active = false, isMuted = false, isCamHidden = false, cameraFacing = 'rear';
+const dbg = { relay: 'not loaded', h: 0, s: 0, r: 0, err: '', ice: '-', conn: '-' };
+function renderDbg() {
+  const d = getEl('dbg'); if (!d) return;
+  d.style.display = active ? 'block' : 'none';
+  d.textContent = 'relay: ' + dbg.relay + ' | candidates host ' + dbg.h + ' stun ' + dbg.s + ' relay ' + dbg.r + ' | ice ' + dbg.ice + ' | conn ' + dbg.conn + (dbg.err ? ' | ' + dbg.err : '');
+}
 let watchdog = null, lostTimer = null, retryTimer = null, hiddenTimer = null, wakeLock = null;
 
 // Stable id for this tab (survives reloads) so a reload isn't mistaken for a second person.
@@ -296,15 +304,16 @@ async function releaseWakeLock() {
 
 // ── Relay servers ─────────────────────────────────────────────
 async function loadIceServers() {
-  if (!TURN_APP || !TURN_API_KEY) return STUN_SERVERS;       // no relay configured: direct connections only
+  if (!TURN_APP || !TURN_API_KEY) { dbg.relay = 'not configured'; return STUN_SERVERS; }   // no relay configured: direct connections only
   try {
     const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 5000);
     const res = await fetch(`https://${TURN_APP}.metered.live/api/v1/turn/credentials?apiKey=${encodeURIComponent(TURN_API_KEY)}`, { signal: ctl.signal });
     clearTimeout(timer);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const list = await res.json();
-    return Array.isArray(list) && list.length ? list : STUN_SERVERS;
-  } catch (err) { console.warn('Relay lookup failed, using direct connection only:', err); return STUN_SERVERS; }
+    if (Array.isArray(list) && list.length) { dbg.relay = 'ok (' + list.length + ' servers)'; return list; }
+    dbg.relay = 'empty reply'; return STUN_SERVERS;
+  } catch (err) { console.warn('Relay lookup failed, using direct connection only:', err); dbg.relay = 'LOOKUP FAILED (' + (err && err.message || err) + ')'; return STUN_SERVERS; }
 }
 
 // ── Connecting two people ─────────────────────────────────────
@@ -324,6 +333,7 @@ async function connect() {
   syncControls(); showCall(); requestWakeLock();
   setStatus('connecting', 'Waiting for the other person…');
   iceServers = await loadIceServers();
+  renderDbg();
   if (!active) return;                                        // ended while loading
   initSB();
   channel = supabaseClient.channel(ROOM, { config: { broadcast: { self: false }, presence: { key: myId } } });
@@ -360,12 +370,21 @@ function makePC() {
   closePC();
   const mine = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 10 });
   pc = mine; pendingCandidates = [];
+  dbg.h = dbg.s = dbg.r = 0; dbg.err = ''; dbg.ice = 'new'; dbg.conn = 'new'; renderDbg();
   localStream.getTracks().forEach(t => mine.addTrack(t, localStream));
   // Anything we can't send, we can still receive
   ['audio', 'video'].forEach(kind => {
     if (!localStream.getTracks().some(t => t.kind === kind)) mine.addTransceiver(kind, { direction: 'recvonly' });
   });
-  mine.onicecandidate = ({ candidate }) => { if (candidate && pc === mine) send({ kind: 'candidate', candidate }); };
+  mine.onicecandidate = ({ candidate }) => {
+    if (!candidate || pc !== mine) return;
+    const t = (candidate.candidate.match(/ typ (\w+)/) || [])[1];
+    if (t === 'relay') dbg.r++; else if (t === 'srflx') dbg.s++; else dbg.h++;
+    renderDbg();
+    send({ kind: 'candidate', candidate });
+  };
+  mine.onicecandidateerror = (e) => { if (pc === mine) { dbg.err = 'ice error ' + e.errorCode + (e.url ? ' ' + String(e.url).split('?')[0] : '') + (e.errorText ? ' ' + e.errorText : ''); renderDbg(); } };
+  mine.oniceconnectionstatechange = () => { if (pc === mine) { dbg.ice = mine.iceConnectionState; renderDbg(); } };
   mine.ontrack = ({ streams, track }) => {
     if (pc !== mine) return;
     const rv = getEl('remote-video');
@@ -376,7 +395,7 @@ function makePC() {
   };
   mine.onconnectionstatechange = () => {
     if (pc !== mine) return;
-    const s = mine.connectionState;
+    const s = mine.connectionState; dbg.conn = s; renderDbg();
     if (s === 'connected') {
       clearTimeout(watchdog); clearTimeout(lostTimer); clearTimeout(retryTimer);
       setStatus('live', 'Connected'); getEl('no-stream-msg').style.display = 'none';
@@ -392,7 +411,7 @@ function makePC() {
 function closePC() {
   clearTimeout(watchdog); clearTimeout(lostTimer); clearTimeout(retryTimer);
   const old = pc; pc = null; pendingCandidates = [];
-  if (old) { old.onicecandidate = old.ontrack = old.onconnectionstatechange = null; try { old.close(); } catch (e) {} }
+  if (old) { old.onicecandidate = old.onicecandidateerror = old.oniceconnectionstatechange = old.ontrack = old.onconnectionstatechange = null; try { old.close(); } catch (e) {} }
   getEl('remote-video').srcObject = null;
   getEl('no-stream-msg').style.display = 'flex';
 }
@@ -478,7 +497,7 @@ function cleanup(msg) {
   getEl('btn-connect').disabled = false;
   ['btn-mute', 'btn-cam', 'btn-flip'].forEach(id => { getEl(id).disabled = false; });
   lv.style.display = '';
-  showIdle(); setStatus('', msg || 'Ready');
+  showIdle(); renderDbg(); setStatus('', msg || 'Ready');
 }
 
 // ── Page lifecycle ────────────────────────────────────────────
