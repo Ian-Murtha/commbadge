@@ -93,7 +93,7 @@
   <!-- Connect button (shown when not in a call) -->
   <div id="card-action">
     <button class="call-btn green" id="btn-connect" onclick="connect()">&#9679; Connect</button>
-    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.0.2</div>
+    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.0.3</div>
   </div>
 
   <!-- Video -->
@@ -160,11 +160,11 @@ const STUN_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:st
 let supabaseClient = null, channel = null, pc = null, localStream = null;
 let iceServers = STUN_SERVERS, peerId = null, pendingCandidates = [];
 let active = false, isMuted = false, isCamHidden = false, cameraFacing = 'rear';
-const dbg = { relay: 'not loaded', h: 0, s: 0, r: 0, err: '', ice: '-', conn: '-' };
+const dbg = { relay: 'not loaded', h: 0, s: 0, r: 0, err: '', ice: '-', conn: '-', rx: 0, rxErr: '', role: '' };
 function renderDbg() {
   const d = getEl('dbg'); if (!d) return;
   d.style.display = active ? 'block' : 'none';
-  d.textContent = 'relay: ' + dbg.relay + ' | candidates host ' + dbg.h + ' stun ' + dbg.s + ' relay ' + dbg.r + ' | ice ' + dbg.ice + ' | conn ' + dbg.conn + (dbg.err ? ' | ' + dbg.err : '');
+  d.textContent = 'relay: ' + dbg.relay + ' | candidates host ' + dbg.h + ' stun ' + dbg.s + ' relay ' + dbg.r + ' | remote cand ' + dbg.rx + (dbg.rxErr ? ' (' + dbg.rxErr + ')' : '') + ' | ' + dbg.role + ' | ice ' + dbg.ice + ' | conn ' + dbg.conn + (dbg.err ? ' | ' + dbg.err : '');
 }
 let watchdog = null, lostTimer = null, retryTimer = null, hiddenTimer = null, wakeLock = null;
 
@@ -370,7 +370,7 @@ function makePC() {
   closePC();
   const mine = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 10 });
   pc = mine; pendingCandidates = [];
-  dbg.h = dbg.s = dbg.r = 0; dbg.err = ''; dbg.ice = 'new'; dbg.conn = 'new'; renderDbg();
+  dbg.h = dbg.s = dbg.r = 0; dbg.rx = 0; dbg.rxErr = ''; dbg.role = iAmCaller() ? 'caller' : 'answerer'; dbg.err = ''; dbg.ice = 'new'; dbg.conn = 'new'; renderDbg();
   localStream.getTracks().forEach(t => mine.addTrack(t, localStream));
   // Anything we can't send, we can still receive
   ['audio', 'video'].forEach(kind => {
@@ -439,7 +439,7 @@ function recover() {
 
 async function flushCandidates() {
   const list = pendingCandidates; pendingCandidates = [];
-  for (const c of list) { try { await pc.addIceCandidate(c); } catch (e) {} }
+  for (const c of list) { try { await pc.addIceCandidate(c); } catch (e) { dbg.rxErr = 'add failed: ' + (e && e.name); renderDbg(); } }
 }
 
 async function onSignal(m) {
@@ -466,7 +466,8 @@ async function onSignal(m) {
     }
   } else if (m.kind === 'candidate') {
     if (!pc) return;
-    if (pc.remoteDescription) { try { await pc.addIceCandidate(m.candidate); } catch (e) {} }
+    dbg.rx++; renderDbg();
+    if (pc.remoteDescription) { try { await pc.addIceCandidate(m.candidate); } catch (e) { dbg.rxErr = 'add failed: ' + (e && e.name); renderDbg(); } }
     else pendingCandidates.push(m.candidate);
   } else if (m.kind === 'need-offer') {
     if (iAmCaller()) { closePC(); startAsCaller(); }
