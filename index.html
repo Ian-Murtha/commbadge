@@ -93,7 +93,7 @@
   <!-- Connect button (shown when not in a call) -->
   <div id="card-action">
     <button class="call-btn green" id="btn-connect" onclick="connect()">&#9679; Connect</button>
-    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.0.5</div>
+    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.0.6</div>
   </div>
 
   <!-- Video -->
@@ -130,7 +130,10 @@
     </div>
   </div>
 
-  <div id="dbg" style="display:none;text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted);padding:0.4rem 0.5rem;word-break:break-word"></div>
+  <div id="dbg" style="display:none;text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted);padding:0.4rem 0.5rem">
+    <div id="dbg-text" style="word-break:break-word;user-select:text;-webkit-user-select:text"></div>
+    <button type="button" id="btn-copy-dbg" onclick="copyDbg()" style="margin-top:0.4rem;font-family:var(--mono);font-size:11px;padding:0.3rem 0.8rem;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer">Copy diagnostics</button>
+  </div>
 
   <!-- End call -->
   <div id="card-controls" style="display:none">
@@ -164,10 +167,26 @@ let supabaseClient = null, channel = null, pc = null, localStream = null;
 let iceServers = STUN_SERVERS, peerId = null, pendingCandidates = [];
 let active = false, isMuted = false, isCamHidden = false, cameraFacing = 'rear';
 const dbg = { relay: 'not loaded', h: 0, s: 0, r: 0, err: '', ice: '-', conn: '-', rx: 0, rxErr: '', role: '', pairs: '' };
+function dbgText() {
+  return 'relay: ' + dbg.relay + ' | candidates host ' + dbg.h + ' stun ' + dbg.s + ' relay ' + dbg.r + ' | remote cand ' + dbg.rx + (dbg.rxErr ? ' (' + dbg.rxErr + ')' : '') + ' | ' + dbg.role + ' | ice ' + dbg.ice + (dbg.pairs ? ' | ' + dbg.pairs : '') + ' | conn ' + dbg.conn + (dbg.err ? ' | ' + dbg.err : '');
+}
 function renderDbg() {
-  const d = getEl('dbg'); if (!d) return;
+  const d = getEl('dbg'), t = getEl('dbg-text'); if (!d || !t) return;
   d.style.display = active ? 'block' : 'none';
-  d.textContent = 'relay: ' + dbg.relay + ' | candidates host ' + dbg.h + ' stun ' + dbg.s + ' relay ' + dbg.r + ' | remote cand ' + dbg.rx + (dbg.rxErr ? ' (' + dbg.rxErr + ')' : '') + ' | ' + dbg.role + ' | ice ' + dbg.ice + (dbg.pairs ? ' | ' + dbg.pairs : '') + ' | conn ' + dbg.conn + (dbg.err ? ' | ' + dbg.err : '');
+  const text = dbgText();
+  if (t.dataset.txt === text) return;                       // unchanged: don't touch the DOM
+  const sel = window.getSelection && window.getSelection();
+  if (sel && !sel.isCollapsed && t.contains(sel.anchorNode)) return;   // user is selecting: leave it alone
+  t.dataset.txt = text; t.textContent = text;
+}
+async function copyDbg() {
+  const text = '[CommBadge v2.0.6 ' + new Date().toISOString() + ']\n' + dbgText() + '\nUA: ' + navigator.userAgent + '\nURL: ' + location.pathname + location.search;
+  try { await navigator.clipboard.writeText(text); showToast('Diagnostics copied'); return; } catch (e) {}
+  try {                                                      // fallback for browsers that block the clipboard API
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); document.body.removeChild(ta);
+    showToast(ok ? 'Diagnostics copied' : 'Copy failed — long-press the text instead');
+  } catch (e) { showToast('Copy failed — long-press the text instead'); }
 }
 let statsTimer = null;
 async function pollStats(mine) {
