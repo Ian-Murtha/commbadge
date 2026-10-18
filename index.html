@@ -93,7 +93,7 @@
   <!-- Connect button (shown when not in a call) -->
   <div id="card-action">
     <button class="call-btn green" id="btn-connect" onclick="connect()">&#9679; Connect</button>
-    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.0.4</div>
+    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.0.5</div>
   </div>
 
   <!-- Video -->
@@ -156,6 +156,9 @@ const TURN_APP     = 'mmx';   // your Metered app name, e.g. 'myapp' (from https
 const TURN_API_KEY = 'b40cc7d133741a6b200d6d8316fff75090cf';   // the credential's apiKey
 const STUN_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
 
+// Test mode: open the page with ?relay=1 on BOTH devices to force every call through the relay server.
+const RELAY_ONLY = new URLSearchParams(window.location.search).get('relay') === '1';
+
 // ── State ─────────────────────────────────────────────────────
 let supabaseClient = null, channel = null, pc = null, localStream = null;
 let iceServers = STUN_SERVERS, peerId = null, pendingCandidates = [];
@@ -169,12 +172,18 @@ function renderDbg() {
 let statsTimer = null;
 async function pollStats(mine) {
   try {
-    const rep = await mine.getStats(); const pair = { }, rem = { }; let n = 0;
+    const rep = await mine.getStats(); const pair = {}, rem = {}, lt = {}, rt = {}, live = []; let n = 0;
     rep.forEach(r => {
-      if (r.type === 'candidate-pair') { n++; pair[r.state] = (pair[r.state] || 0) + 1; }
-      if (r.type === 'remote-candidate') rem[r.candidateType] = (rem[r.candidateType] || 0) + 1;
+      if (r.type === 'local-candidate') lt[r.id] = r.candidateType;
+      if (r.type === 'remote-candidate') { rt[r.id] = r.candidateType; rem[r.candidateType] = (rem[r.candidateType] || 0) + 1; }
     });
-    dbg.pairs = 'pairs ' + n + ' ' + JSON.stringify(pair) + ' remote ' + JSON.stringify(rem);
+    rep.forEach(r => {
+      if (r.type !== 'candidate-pair') return;
+      n++; pair[r.state] = (pair[r.state] || 0) + 1;
+      if (r.state !== 'failed' && r.state !== 'frozen' && live.length < 6)
+        live.push((lt[r.localCandidateId] || '?') + '>' + (rt[r.remoteCandidateId] || '?') + ':' + r.state + (r.nominated ? '*' : ''));
+    });
+    dbg.pairs = 'pairs ' + n + ' ' + JSON.stringify(pair) + ' remote ' + JSON.stringify(rem) + ' live [' + live.join(', ') + ']';
     renderDbg();
   } catch (e) {}
 }
@@ -380,9 +389,9 @@ function onPresence() {
 
 function makePC() {
   closePC();
-  const mine = new RTCPeerConnection({ iceServers });
+  const mine = new RTCPeerConnection({ iceServers, iceTransportPolicy: RELAY_ONLY ? 'relay' : 'all' });
   pc = mine; pendingCandidates = [];
-  dbg.h = dbg.s = dbg.r = 0; dbg.rx = 0; dbg.rxErr = ''; dbg.role = iAmCaller() ? 'caller' : 'answerer'; dbg.err = ''; dbg.ice = 'new'; dbg.conn = 'new'; renderDbg();
+  dbg.h = dbg.s = dbg.r = 0; dbg.rx = 0; dbg.rxErr = ''; dbg.role = (iAmCaller() ? 'caller' : 'answerer') + (RELAY_ONLY ? ' RELAY-ONLY' : ''); dbg.err = ''; dbg.ice = 'new'; dbg.conn = 'new'; renderDbg();
   localStream.getTracks().forEach(t => mine.addTrack(t, localStream));
   // Anything we can't send, we can still receive
   ['audio', 'video'].forEach(kind => {
