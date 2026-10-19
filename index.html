@@ -93,7 +93,7 @@
   <!-- Connect button (shown when not in a call) -->
   <div id="card-action">
     <button class="call-btn green" id="btn-connect" onclick="connect()">&#9679; Connect</button>
-    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.1.1</div>
+    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.2.0</div>
   </div>
 
   <!-- Video -->
@@ -180,13 +180,29 @@ function renderDbg() {
   t.dataset.txt = text; t.textContent = text;
 }
 async function copyDbg() {
-  const text = '[CommBadge v2.1.1 ' + new Date().toISOString() + ']\n' + dbgText() + '\nUA: ' + navigator.userAgent + '\nURL: ' + location.pathname + location.search;
+  const text = '[CommBadge v2.2.0 ' + new Date().toISOString() + ']\n' + dbgText() + '\nUA: ' + navigator.userAgent + '\nURL: ' + location.pathname + location.search;
   try { await navigator.clipboard.writeText(text); showToast('Diagnostics copied'); return; } catch (e) {}
   try {                                                      // fallback for browsers that block the clipboard API
     const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
     document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); document.body.removeChild(ta);
     showToast(ok ? 'Diagnostics copied' : 'Copy failed — long-press the text instead');
   } catch (e) { showToast('Copy failed — long-press the text instead'); }
+}
+// Stall watchdog: a connection can report "connected" while no video actually moves (for example
+// after a phone's screen lock kills its relay link). If video stops advancing for ~10s, rebuild it.
+const stall = { rx: null, tx: null, rxStill: 0, txStill: 0, last: 0, count: 0 };
+function resetStall() { stall.rx = stall.tx = null; stall.rxStill = stall.txStill = 0; }
+function checkStall(mine, rxF, txF) {
+  if (!active || pc !== mine || mine.connectionState !== 'connected' || document.visibilityState !== 'visible') { stall.rxStill = stall.txStill = 0; return; }
+  if (typeof rxF === 'number' && rxF > 0) { stall.rxStill = (rxF === stall.rx) ? stall.rxStill + 1 : 0; stall.rx = rxF; }
+  const vt = localStream && localStream.getVideoTracks()[0];
+  if (typeof txF === 'number' && vt && vt.readyState === 'live' && vt.enabled) { stall.txStill = (txF === stall.tx) ? stall.txStill + 1 : 0; stall.tx = txF; }
+  else stall.txStill = 0;
+  if ((stall.rxStill >= 5 || stall.txStill >= 5) && Date.now() - stall.last > 30000) {
+    stall.last = Date.now(); stall.count++; resetStall();
+    showToast('Video stalled — reconnecting');
+    recover();
+  }
 }
 let statsTimer = null;
 async function pollStats(mine) {
@@ -208,7 +224,8 @@ async function pollStats(mine) {
     const lt0 = t => !t ? 'none' : t.readyState + (t.muted ? '/muted' : '') + (t.enabled ? '' : '/off');
     const rv = getEl('remote-video');
     dbg.media = 'local v:' + lt0(localStream && localStream.getVideoTracks()[0]) + ' a:' + lt0(localStream && localStream.getAudioTracks()[0]) +
-      ' | remote video ' + (rv.srcObject ? (rv.paused ? 'paused ' : 'playing ') + rv.videoWidth + 'x' + rv.videoHeight : 'none') + ' | frames sent ' + txF + ' received ' + rxF;
+      ' | remote video ' + (rv.srcObject ? (rv.paused ? 'paused ' : 'playing ') + rv.videoWidth + 'x' + rv.videoHeight : 'none') + ' | frames sent ' + txF + ' received ' + rxF + (stall.count ? ' | auto-restarts ' + stall.count : '');
+    checkStall(mine, rxF, txF);
     renderDbg();
   } catch (e) {}
 }
@@ -462,7 +479,7 @@ function makePC() {
   closePC();
   const mine = new RTCPeerConnection({ iceServers, iceTransportPolicy: RELAY_ONLY ? 'relay' : 'all' });
   pc = mine; pendingCandidates = [];
-  dbg.h = dbg.s = dbg.r = 0; dbg.rx = 0; dbg.rxErr = ''; dbg.role = (iAmCaller() ? 'caller' : 'answerer') + (RELAY_ONLY ? ' RELAY-ONLY' : ''); dbg.err = ''; dbg.ice = 'new'; dbg.conn = 'new'; renderDbg();
+  resetStall(); dbg.h = dbg.s = dbg.r = 0; dbg.rx = 0; dbg.rxErr = ''; dbg.role = (iAmCaller() ? 'caller' : 'answerer') + (RELAY_ONLY ? ' RELAY-ONLY' : ''); dbg.err = ''; dbg.ice = 'new'; dbg.conn = 'new'; renderDbg();
   const liveTracks = localStream.getTracks().filter(t => t.readyState === 'live');
   liveTracks.forEach(t => mine.addTrack(t, localStream));
   // Anything we can't send, we can still receive
