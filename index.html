@@ -93,7 +93,7 @@
   <!-- Connect button (shown when not in a call) -->
   <div id="card-action">
     <button class="call-btn green" id="btn-connect" onclick="connect()">&#9679; Connect</button>
-    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.1.0</div>
+    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.1.1</div>
   </div>
 
   <!-- Video -->
@@ -166,9 +166,9 @@ const RELAY_ONLY = new URLSearchParams(window.location.search).get('relay') === 
 let supabaseClient = null, channel = null, pc = null, localStream = null;
 let iceServers = STUN_SERVERS, peerId = null, pendingCandidates = [];
 let active = false, isMuted = false, isCamHidden = false, cameraFacing = 'rear';
-const dbg = { relay: 'not loaded', h: 0, s: 0, r: 0, err: '', ice: '-', conn: '-', rx: 0, rxErr: '', role: '', pairs: '' };
+const dbg = { relay: 'not loaded', h: 0, s: 0, r: 0, err: '', ice: '-', conn: '-', rx: 0, rxErr: '', role: '', pairs: '', media: '' };
 function dbgText() {
-  return 'relay: ' + dbg.relay + ' | candidates host ' + dbg.h + ' stun ' + dbg.s + ' relay ' + dbg.r + ' | remote cand ' + dbg.rx + (dbg.rxErr ? ' (' + dbg.rxErr + ')' : '') + ' | ' + dbg.role + ' | ice ' + dbg.ice + (dbg.pairs ? ' | ' + dbg.pairs : '') + ' | conn ' + dbg.conn + (dbg.err ? ' | ' + dbg.err : '');
+  return 'relay: ' + dbg.relay + ' | candidates host ' + dbg.h + ' stun ' + dbg.s + ' relay ' + dbg.r + ' | remote cand ' + dbg.rx + (dbg.rxErr ? ' (' + dbg.rxErr + ')' : '') + ' | ' + dbg.role + ' | ice ' + dbg.ice + (dbg.pairs ? ' | ' + dbg.pairs : '') + ' | conn ' + dbg.conn + (dbg.media ? ' | ' + dbg.media : '') + (dbg.err ? ' | ' + dbg.err : '');
 }
 function renderDbg() {
   const d = getEl('dbg'), t = getEl('dbg-text'); if (!d || !t) return;
@@ -180,7 +180,7 @@ function renderDbg() {
   t.dataset.txt = text; t.textContent = text;
 }
 async function copyDbg() {
-  const text = '[CommBadge v2.1.0 ' + new Date().toISOString() + ']\n' + dbgText() + '\nUA: ' + navigator.userAgent + '\nURL: ' + location.pathname + location.search;
+  const text = '[CommBadge v2.1.1 ' + new Date().toISOString() + ']\n' + dbgText() + '\nUA: ' + navigator.userAgent + '\nURL: ' + location.pathname + location.search;
   try { await navigator.clipboard.writeText(text); showToast('Diagnostics copied'); return; } catch (e) {}
   try {                                                      // fallback for browsers that block the clipboard API
     const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
@@ -191,8 +191,10 @@ async function copyDbg() {
 let statsTimer = null;
 async function pollStats(mine) {
   try {
-    const rep = await mine.getStats(); const pair = {}, rem = {}, lt = {}, rt = {}, live = []; let n = 0;
+    const rep = await mine.getStats(); const pair = {}, rem = {}, lt = {}, rt = {}, live = []; let n = 0, rxF = '-', txF = '-';
     rep.forEach(r => {
+      if (r.type === 'inbound-rtp' && (r.kind || r.mediaType) === 'video') rxF = r.framesDecoded;
+      if (r.type === 'outbound-rtp' && (r.kind || r.mediaType) === 'video') txF = r.framesEncoded;
       if (r.type === 'local-candidate') lt[r.id] = r.candidateType;
       if (r.type === 'remote-candidate') { rt[r.id] = r.candidateType; rem[r.candidateType] = (rem[r.candidateType] || 0) + 1; }
     });
@@ -203,6 +205,10 @@ async function pollStats(mine) {
         live.push((lt[r.localCandidateId] || '?') + '>' + (rt[r.remoteCandidateId] || '?') + ':' + r.state + (r.nominated ? '*' : ''));
     });
     dbg.pairs = 'pairs ' + n + ' ' + JSON.stringify(pair) + ' remote ' + JSON.stringify(rem) + ' live [' + live.join(', ') + ']';
+    const lt0 = t => !t ? 'none' : t.readyState + (t.muted ? '/muted' : '') + (t.enabled ? '' : '/off');
+    const rv = getEl('remote-video');
+    dbg.media = 'local v:' + lt0(localStream && localStream.getVideoTracks()[0]) + ' a:' + lt0(localStream && localStream.getAudioTracks()[0]) +
+      ' | remote video ' + (rv.srcObject ? (rv.paused ? 'paused ' : 'playing ') + rv.videoWidth + 'x' + rv.videoHeight : 'none') + ' | frames sent ' + txF + ' received ' + rxF;
     renderDbg();
   } catch (e) {}
 }
@@ -326,6 +332,31 @@ function toggleCamera() {
   getEl('local-video').style.opacity = isCamHidden ? '0.15' : '1';
 }
 
+// Phones switch the camera/mic off when the screen locks or the app is backgrounded. The track then
+// stays 'ended' for good, so a reconnect would send nothing. Re-open any ended track and use it.
+async function ensureLocalTracks() {
+  if (!active || !localStream || !navigator.mediaDevices) return false;
+  let changed = false;
+  for (const old of localStream.getTracks()) {
+    if (old.readyState !== 'ended') continue;
+    try {
+      const fresh = old.kind === 'video'
+        ? await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: cameraFacing === 'rear' ? 'environment' : 'user' } }, audio: false })
+        : await navigator.mediaDevices.getUserMedia({ video: false, audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      const nt = fresh.getTracks()[0];
+      nt.enabled = old.kind === 'video' ? !isCamHidden : !isMuted;
+      localStream.removeTrack(old); localStream.addTrack(nt);
+      const sender = pc && pc.getSenders().find(s => s.track === old);
+      if (sender) { try { await sender.replaceTrack(nt); } catch (e) { changed = true; } }   // couldn't swap in place: rebuild the connection
+      else if (pc) changed = true;
+      nt.addEventListener('ended', () => { if (document.visibilityState === 'visible') ensureLocalTracks(); });
+    } catch (e) { console.warn('Could not reopen', old.kind, e); }
+  }
+  const lv = getEl('local-video'); lv.srcObject = localStream; lv.play().catch(() => {});
+  syncControls();
+  return changed;
+}
+
 // Keep the default audio output (stops some browsers grabbing a headset)
 async function restoreAudioOutput() {
   try { const rv = getEl('remote-video'); if (rv && rv.setSinkId) await rv.setSinkId('default'); } catch (err) {}
@@ -432,10 +463,11 @@ function makePC() {
   const mine = new RTCPeerConnection({ iceServers, iceTransportPolicy: RELAY_ONLY ? 'relay' : 'all' });
   pc = mine; pendingCandidates = [];
   dbg.h = dbg.s = dbg.r = 0; dbg.rx = 0; dbg.rxErr = ''; dbg.role = (iAmCaller() ? 'caller' : 'answerer') + (RELAY_ONLY ? ' RELAY-ONLY' : ''); dbg.err = ''; dbg.ice = 'new'; dbg.conn = 'new'; renderDbg();
-  localStream.getTracks().forEach(t => mine.addTrack(t, localStream));
+  const liveTracks = localStream.getTracks().filter(t => t.readyState === 'live');
+  liveTracks.forEach(t => mine.addTrack(t, localStream));
   // Anything we can't send, we can still receive
   ['audio', 'video'].forEach(kind => {
-    if (!localStream.getTracks().some(t => t.kind === kind)) mine.addTransceiver(kind, { direction: 'recvonly' });
+    if (!liveTracks.some(t => t.kind === kind)) mine.addTransceiver(kind, { direction: 'recvonly' });
   });
   mine.onicecandidate = ({ candidate }) => {
     if (!candidate || pc !== mine) return;
@@ -575,7 +607,10 @@ document.addEventListener('visibilitychange', () => {
     getEl('local-video').play().catch(() => {});
     getEl('remote-video').play().catch(() => {});
     if (!wakeLock) requestWakeLock();
-    if (pc && (pc.connectionState === 'disconnected' || pc.connectionState === 'failed')) recover();
+    ensureLocalTracks().then(rebuild => {
+      if (!active) return;
+      if (rebuild || (pc && (pc.connectionState === 'disconnected' || pc.connectionState === 'failed'))) recover();
+    });
   }
 });
 // If remote video was blocked from auto-playing, the next tap anywhere starts it.
