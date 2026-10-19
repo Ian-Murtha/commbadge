@@ -93,7 +93,7 @@
   <!-- Connect button (shown when not in a call) -->
   <div id="card-action">
     <button class="call-btn green" id="btn-connect" onclick="connect()">&#9679; Connect</button>
-    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.0.6</div>
+    <div class="embed-hide" id="version-text" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:0.75rem">IPM's CommBadge v2.1.0</div>
   </div>
 
   <!-- Video -->
@@ -180,7 +180,7 @@ function renderDbg() {
   t.dataset.txt = text; t.textContent = text;
 }
 async function copyDbg() {
-  const text = '[CommBadge v2.0.6 ' + new Date().toISOString() + ']\n' + dbgText() + '\nUA: ' + navigator.userAgent + '\nURL: ' + location.pathname + location.search;
+  const text = '[CommBadge v2.1.0 ' + new Date().toISOString() + ']\n' + dbgText() + '\nUA: ' + navigator.userAgent + '\nURL: ' + location.pathname + location.search;
   try { await navigator.clipboard.writeText(text); showToast('Diagnostics copied'); return; } catch (e) {}
   try {                                                      // fallback for browsers that block the clipboard API
     const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
@@ -376,13 +376,34 @@ async function connect() {
   renderDbg();
   if (!active) return;                                        // ended while loading
   initSB();
-  channel = supabaseClient.channel(ROOM, { config: { broadcast: { self: false }, presence: { key: myId } } });
-  channel.on('broadcast', { event: 'signal' }, ({ payload }) => onSignal(payload));
-  channel.on('presence', { event: 'sync' }, onPresence);
-  channel.subscribe(async status => {
-    if (!active) return;
-    if (status === 'SUBSCRIBED') { try { await channel.track({ t: Date.now() }); } catch (e) {} }
-    else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') cleanup('Could not reach the call service');
+  joinChannel();
+}
+
+// Join (or re-join) the signalling room. A dropped connection to the call service (for example when a
+// phone switches from Wi-Fi to cellular) is normal, so keep the call alive, rebuild the channel and
+// restart the media connection once it's back. Only give up if it stays down for a minute.
+let signalFailTimer = null, signalGiveUpTimer = null, joinGen = 0;
+function joinChannel() {
+  const gen = ++joinGen;
+  const old = channel; channel = null;
+  if (old) { try { supabaseClient.removeChannel(old); } catch (e) {} }
+  const ch = supabaseClient.channel(ROOM, { config: { broadcast: { self: false }, presence: { key: myId } } });
+  channel = ch;
+  ch.on('broadcast', { event: 'signal' }, ({ payload }) => onSignal(payload));
+  ch.on('presence', { event: 'sync' }, onPresence);
+  ch.subscribe(async status => {
+    if (!active || channel !== ch || gen !== joinGen) return;
+    if (status === 'SUBSCRIBED') {
+      clearTimeout(signalFailTimer); clearTimeout(signalGiveUpTimer); signalFailTimer = signalGiveUpTimer = null;
+      try { await ch.track({ t: Date.now() }); } catch (e) {}
+      if (pc && pc.connectionState === 'connected') setStatus('live', 'Connected');
+      else if (peerId) recover();                                              // the network may have changed while offline
+      else setStatus('connecting', 'Waiting for the other person…');
+    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      setStatus('connecting', 'Reconnecting to call service…');
+      if (!signalFailTimer) signalFailTimer = setTimeout(() => { signalFailTimer = null; if (active && channel === ch) joinChannel(); }, 6000);
+      if (!signalGiveUpTimer) signalGiveUpTimer = setTimeout(() => { signalGiveUpTimer = null; if (active) cleanup('Could not reach the call service'); }, 60000);
+    }
   });
 }
 
@@ -525,7 +546,8 @@ async function endCall() {
 function cleanup(msg) {
   active = false; peerId = null;
   closePC();
-  const ch = channel; channel = null;
+  const ch = channel; channel = null; joinGen++;
+  clearTimeout(signalFailTimer); clearTimeout(signalGiveUpTimer); signalFailTimer = signalGiveUpTimer = null;
   if (ch) { try { ch.unsubscribe(); } catch (e) {} }
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
   releaseWakeLock();

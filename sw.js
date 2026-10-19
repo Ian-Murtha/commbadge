@@ -1,4 +1,4 @@
-const CACHE = 'commbadge-v2.0.6';
+const CACHE = 'commbadge-v2.1.0';
 const ASSETS = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', e => {
